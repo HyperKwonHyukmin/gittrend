@@ -5,11 +5,14 @@ on:
     - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 뉴스)
     - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 AI 뉴스도 담기 위해)
   workflow_dispatch:        # Actions 탭에서 수동 실행
+  issues:
+    types: [opened]         # 페이지의 [심층 분석 요청] 버튼이 연 이슈 → 바로 분석
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write             # 심층 분석 요청 이슈에 댓글을 달고 닫기 위해
 
 concurrency:
   group: update-trends
@@ -17,8 +20,12 @@ concurrency:
 
 jobs:
   update:
+    # 이슈로 실행될 때는 저장소 주인이 연 "deep: owner/name" 이슈만 처리한다
+    if: >-
+      github.event_name != 'issues' ||
+      (startsWith(github.event.issue.title, 'deep:') && github.event.issue.author_association == 'OWNER')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -32,18 +39,42 @@ jobs:
       # AI 정리가 중간에 멈춰도(키 오류, 크레딧 부족) 모은 데이터는 배포하고, 마지막에 실패로 표시한다
       - name: Collect and summarize
         id: collect
+        if: github.event_name != 'issues'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_REASONING: ${{ vars.OPENAI_REASONING }}
+          OPENAI_DEEP_MODEL: ${{ vars.OPENAI_DEEP_MODEL }}
+          OPENAI_DEEP_REASONING: ${{ vars.OPENAI_DEEP_REASONING }}
+          DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
           NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: python collect.py
+
+      # 심층 분석 요청 이슈만 처리 (수집은 하지 않음)
+      - name: Deep analysis requests
+        id: deep
+        if: github.event_name == 'issues'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_REASONING: ${{ vars.OPENAI_REASONING }}
+          OPENAI_DEEP_MODEL: ${{ vars.OPENAI_DEEP_MODEL }}
+          OPENAI_DEEP_REASONING: ${{ vars.OPENAI_DEEP_REASONING }}
+          DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
+          MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
+          MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python deep.py
 
       - name: Commit data
         run: |
@@ -69,8 +100,8 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@v4
 
-      - name: Report collect failure
-        if: steps.collect.outcome == 'failure'
+      - name: Report failure
+        if: steps.collect.outcome == 'failure' || steps.deep.outcome == 'failure'
         run: |
-          echo "::error::수집 또는 AI 정리 중 오류가 있었습니다. 위 'Collect and summarize' 로그를 확인하세요."
+          echo "::error::수집 또는 AI 분석 중 오류가 있었습니다. 위 단계의 로그를 확인하세요."
           exit 1

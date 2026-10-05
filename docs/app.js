@@ -279,6 +279,7 @@
         </div>
         <div class="card-foot">
           <div class="chips">
+            ${r.has_deep ? '<span class="chip deep-chip">심층 분석</span>' : ""}
             ${r.category ? `<span class="chip cat">${esc(r.category)}</span>` : ""}
             ${srcs}
           </div>
@@ -545,6 +546,101 @@
     `;
   }
 
+  // ------------------------------------------------------------ 심층 분석
+
+  // 이 사이트의 GitHub 저장소 주소 (심층 분석 요청 이슈를 여는 데 쓴다)
+  function repoUrl() {
+    if (data.repo_url) return data.repo_url;
+    const m = location.hostname.match(/^([\w-]+)\.github\.io$/);
+    const seg = location.pathname.split("/").filter(Boolean)[0];
+    return m && seg ? `https://github.com/${m[1]}/${seg}` : "";
+  }
+
+  function requestHtml(r) {
+    const base = repoUrl();
+    if (!base) return "";
+    const body = "이 라이브러리를 심층 분석해 주세요.\n\n" +
+      "제목을 바꾸지 말고 그대로 [Create] 버튼을 누르면 됩니다.\n" +
+      "몇 분 뒤 분석이 끝나면 이 이슈에 댓글이 달리고 자동으로 닫혀요.";
+    const url = `${base}/issues/new?title=${encodeURIComponent("deep: " + r.full_name)}&body=${encodeURIComponent(body)}`;
+    return `
+      <div class="deep-cta">
+        <div>
+          <b>더 깊이 알고 싶다면</b>
+          <p>주요 API·메서드, 동작 원리, 사람들이 실제로 쓰는 방식, 커뮤니티 반응, 내 작업에 맞는지까지 더 높은 AI 모델로 분석해요.
+            GitHub 로그인 후 열리는 화면에서 [Create]를 누르면 몇 분 안에 반영돼요.</p>
+        </div>
+        <a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener">심층 분석 요청 ↗</a>
+      </div>`;
+  }
+
+  const LEVEL_CLASS = { "높음": "lv-high", "보통": "lv-mid", "낮음": "lv-low" };
+
+  function deepHtml(d) {
+    const x = d.deep;
+    const sec = (ico, title, inner) => inner && inner.trim() ? `
+      <section class="section"><h2><span class="ico">${ico}</span>${title}</h2>${inner}</section>` : "";
+    const fit = x.fit || {};
+    const com = x.community || {};
+    const mat = x.maturity || {};
+    const gs = x.getting_started || {};
+
+    const apis = (x.key_apis || []).map(a => `
+      <div class="api">
+        <div class="api-head"><code class="api-name">${esc(a.name)}</code>${a.kind ? `<span class="chip">${esc(a.kind)}</span>` : ""}</div>
+        ${a.signature && a.signature !== a.name ? `<pre class="api-sig"><code>${esc(a.signature)}</code></pre>` : ""}
+        ${a.desc ? `<p>${esc(a.desc)}</p>` : ""}
+        ${a.example ? codeBlock("예시", "", a.example) : ""}
+      </div>`).join("");
+
+    const patterns = (x.usage_patterns || []).map(p => `
+      <div class="pattern">
+        <b>${esc(p.title)}</b>
+        ${p.desc ? `<p>${esc(p.desc)}</p>` : ""}
+        ${p.evidence ? `<p class="evidence">근거: ${esc(p.evidence)}</p>` : ""}
+      </div>`).join("");
+
+    const comCol = (title, arr) => arr && arr.length ? `<div class="com-col"><b>${title}</b>${listHtml(arr)}</div>` : "";
+    const community = `
+      ${com.sentiment ? `<p><span class="pill">${esc(com.sentiment)}</span></p>` : ""}
+      <div class="com-grid">
+        ${comCol("👍 좋다는 평가", com.praise)}
+        ${comCol("👎 불만·문제", com.complaints)}
+        ${comCol("❓ 자주 묻는 질문", com.common_questions)}
+      </div>`;
+
+    return `
+      <section class="deep-top">
+        <div class="deep-k"><span class="deep-badge">심층 분석</span>${esc(d.deep_model || "")} · ${esc(d.deep_at || "")}</div>
+        ${x.verdict ? `<p class="lead">${esc(x.verdict)}</p>` : ""}
+        ${fit.level || fit.reason ? `
+        <div class="fit">
+          <div class="fit-head">
+            <b>내 작업에 맞을까?</b>
+            ${fit.level ? `<span class="fit-level ${LEVEL_CLASS[fit.level] || ""}">${esc(fit.level)}</span>` : ""}
+            <small>${d.deep_profile ? "profile.md 기준" : "일반 개발자 기준"}</small>
+          </div>
+          ${fit.reason ? `<p>${esc(fit.reason)}</p>` : ""}
+          <div class="fit-grid">
+            ${fit.use_in_my_work?.length ? `<div><b>이렇게 쓸 수 있어요</b>${listHtml(fit.use_in_my_work)}</div>` : ""}
+            ${fit.skip_if?.length ? `<div><b>이럴 땐 맞지 않아요</b>${listHtml(fit.skip_if)}</div>` : ""}
+          </div>
+        </div>` : ""}
+      </section>
+      ${sec("🧠", "동작 원리", x.how_it_works ? `<p>${esc(x.how_it_works)}</p>` : "")}
+      ${sec("🔧", "주요 API · 메서드", apis ? `<div class="apis">${apis}</div>` : "")}
+      ${sec("✨", "할 수 있는 것", (x.capabilities || []).length
+        ? `<div class="features">${x.capabilities.map(f => `<div class="feature"><b>${esc(f.title)}</b><span>${esc(f.desc)}</span></div>`).join("")}</div>` : "")}
+      ${sec("👥", "사람들은 이렇게 써요", patterns ? `<div class="patterns">${patterns}</div>` : "")}
+      ${sec("💬", "커뮤니티 반응", (com.praise?.length || com.complaints?.length || com.common_questions?.length || com.sentiment) ? community : "")}
+      ${sec("📈", "성숙도", mat.stage || mat.notes ? `${mat.stage ? `<p><span class="pill">${esc(mat.stage)}</span></p>` : ""}${mat.notes ? `<p>${esc(mat.notes)}</p>` : ""}` : "")}
+      ${sec("🔁", "대안과 비교", (x.alternatives || []).length
+        ? `<div class="alts">${x.alternatives.map(a => `<div class="alt"><b>${esc(a.name)}</b><span>${esc(a.choose_when)}</span></div>`).join("")}</div>` : "")}
+      ${sec("🚀", "시작하기", codeBlock("설치", "", gs.install) + codeBlock("처음 돌려보기", gs.code_lang, gs.code) + listHtml(gs.steps, true, "steps"))}
+      ${sec("⚠️", "도입 전 확인할 점", listHtml(x.watch_out, false, "plain caveats"))}
+      <p class="ai-note">심층 분석 · README, 소스 일부, 문서, 이슈, HN 댓글을 바탕으로 AI가 쓴 글이라 틀린 내용이 있을 수 있어요</p>`;
+  }
+
   function similarHtml(key) {
     const recs = recommend([key], 6);
     if (!recs.length) return "";
@@ -567,7 +663,7 @@
     $app.innerHTML = `<div class="detail"><p class="loading">불러오는 중…</p></div>`;
     let d = detailCache[slug];
     const known = data.repos[key] || catalog[key];
-    if (!d && known && known.has_summary === false) d = {};  // 정리 파일이 아직 없는 저장소
+    if (!d && known && known.has_summary === false && !known.has_deep) d = {};  // 정리 파일이 아직 없는 저장소
     if (!d) {
       try {
         const res = await fetch(`data/repos/${encodeURIComponent(slug)}.json`, { cache: "no-cache" });
@@ -623,8 +719,10 @@
         </div>
         <div class="stats">${stats}</div>
         ${sparkHtml(key)}
-        ${summaryHtml(s, r)}
-        ${s ? `<p class="ai-note">AI 정리 · ${esc(d.model || "")} · ${esc(d.summarized_at || "")} · README 기준이라 틀린 내용이 있을 수 있어요</p>` : ""}
+        ${d.deep ? deepHtml(d) : ""}
+        ${d.deep && s ? `<details class="basic"><summary>간단 정리 보기 (${esc(d.model || "")})</summary>${summaryHtml(s, r)}</details>` : summaryHtml(s, r)}
+        ${s && !d.deep ? `<p class="ai-note">AI 정리 · ${esc(d.model || "")} · ${esc(d.summarized_at || "")} · README 기준이라 틀린 내용이 있을 수 있어요</p>` : ""}
+        ${d.deep ? "" : requestHtml(r)}
         ${similarHtml(key)}
       </article>`;
     bindBack();

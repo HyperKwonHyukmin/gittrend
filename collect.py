@@ -676,6 +676,7 @@ def main():
             "stars": r.get("stars", 0),
             "created_at": r.get("created_at", ""),
             "has_summary": bool(s) or c.get("has_summary", False),
+            "has_deep": bool(details[key].get("deep")) or c.get("has_deep", False),
             "first_seen": c.get("first_seen", today_s),
             "last_seen": today_s,
         }
@@ -709,6 +710,7 @@ def main():
             "level": s.get("level", ""),
             "tags": s.get("tags", []),
             "has_summary": bool(s),
+            "has_deep": bool(details[key].get("deep")),
             "first_seen": first_seen,
             "is_new": has_past and first_seen == today_s,
         }
@@ -719,6 +721,7 @@ def main():
         "ai_enabled": ai_on,
         "ai_error": ai_error,
         "has_past": has_past,
+        "repo_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}" if os.environ.get("GITHUB_REPOSITORY") else "",
         "digest": digest,
         "lists": lists,
         "repos": index_repos,
@@ -751,6 +754,16 @@ def main():
     except Exception as e:  # noqa: BLE001 - 뉴스가 실패해도 라이브러리 데이터는 이미 저장됨
         log(f"! AI 뉴스 실패: {e}")
         ai_error = ai_error or f"AI 뉴스 실패: {e}"
+
+    # 심층 분석 (deep.py): 요청 이슈 + 종합 주목 상위에서 자동으로 몇 개
+    import deep
+    per_run = int(os.environ.get("DEEP_PER_RUN") or 1)
+    auto = [k for k in hot if not details[k].get("deep")][:per_run] if not ai_error else []
+    hn_urls = {k: r["hn"]["hn_url"] for k, r in repos.items() if r.get("hn")}
+    try:
+        ai_error = ai_error or deep.run(gh, auto_keys=auto, hn_urls=hn_urls)
+    except Exception as e:  # noqa: BLE001
+        log(f"! 심층 분석 실패: {e}")
 
     if ai_error:
         # 데이터는 저장했지만, Actions에서 실패로 표시해 메일 알림이 가게 한다

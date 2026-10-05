@@ -19,6 +19,23 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 
 저장소마다 AI 정리를 **딱 한 번** 만들어 `docs/data/repos/<저장소>.json`에 영구 보관합니다. 순위에서 빠졌다가 다시 올라와도 저장된 정리를 그대로 쓰므로, API는 처음 보는 저장소에만 쓰입니다. 하루 사용량은 대체로 "그날 새로 뜬 저장소 수 + 트렌드 요약 1회"입니다.
 
+## 심층 분석 (더 높은 모델)
+
+기본 정리는 저렴한 모델(`gpt-5-mini`)로 모든 라이브러리에 붙이고, 그 위에 **심층 분석**을 더합니다.
+
+- AI가 README뿐 아니라 **패키지 설정, 대표 소스, docs·examples, 댓글 많은 이슈, Hacker News 댓글, 최근 릴리스**까지 읽습니다.
+- 정리하는 내용: 결론, **내 작업에 맞을까?**(`profile.md` 기준), 동작 원리, **주요 API·메서드**, 할 수 있는 것, **사람들은 이렇게 써요**, 커뮤니티 반응(좋은 점·불만·자주 묻는 질문), 성숙도, 대안과 비교, 시작하기, 도입 전 확인할 점
+- 모델: `OPENAI_DEEP_MODEL` (기본 `gpt-5`, 추론 `medium`)
+- 분석은 라이브러리마다 **한 번만** 하고 영구 보관합니다.
+
+언제 분석하나:
+1. **자동:** 실행마다 종합 주목 상위에서 `DEEP_PER_RUN`개(기본 1개, 하루 2개)
+2. **요청:** 상세 화면의 **[심층 분석 요청]** 버튼 → GitHub 이슈가 열리고 [Create]를 누르면 몇 분 안에 분석해서 반영합니다. 분석이 끝나면 이슈에 댓글이 달리고 자동으로 닫힙니다. 저장소 주인(본인)이 연 이슈만 처리합니다.
+
+`profile.md`에 하시는 작업을 적어 두면 "내 작업에 맞을까?"를 그 기준으로 판단합니다. 공개 저장소라 이 파일도 공개된다는 점에 주의하세요.
+
+비용(대략): 한 건에 입력 1~2만 토큰 + 출력·추론 수천 토큰이라 `gpt-5` 기준 **한 건에 100~150원 안팎**으로 예상합니다. 자동 하루 2건이면 한 달 몇천 원 수준이고, 요청한 만큼 더해집니다. 정확한 금액은 페이지 하단 **OpenAI Usage → 사용량** 링크에서 확인하세요.
+
 ## 관심 목록과 추천
 
 - 카드나 상세 화면의 ☆를 누르면 관심 목록에 저장됩니다.
@@ -62,6 +79,8 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 ```
 collect.py                    라이브러리 수집 + AI 정리 (Python 표준 라이브러리만 사용)
 news.py                       AI 뉴스 수집 + AI 정리 (collect.py가 마지막에 실행)
+deep.py                       심층 분석 (collect.py가 마지막에 실행, 요청 이슈가 열리면 단독 실행)
+profile.md                    내 작업 프로필 ("내 작업에 맞을까?" 판단 기준)
 docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
   index.html, app.js, style.css, 아이콘들
   data/index.json             오늘의 목록 + 트렌드 요약
@@ -90,7 +109,8 @@ data/news_seen.json           AI로 처리한 기사 기록 (다시 보내지 �
 2. 저장소 **Settings → Secrets and variables → Actions**
    - Secrets 탭: `OPENAI_API_KEY` 추가
    - Secrets 탭 (선택): `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `THREADS_ACCESS_TOKEN`
-   - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160)
+   - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
+     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 1)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
    끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로는 매일 오전 7시와 오후 6시에 자동으로 갱신됩니다.
@@ -101,6 +121,8 @@ data/news_seen.json           AI로 처리한 기사 기록 (다시 보내지 �
 - 공개 저장소에서 오래 활동이 없으면 GitHub가 예약 실행을 멈출 수 있습니다. 멈추기 전에 메일이 오고, Actions 탭에서 다시 켤 수 있습니다.
 
 ## 비용
+
+사용량과 남은 잔액은 페이지 맨 아래 **OpenAI Usage** 링크(사용량 · 남은 잔액 · 사용 한도)에서 바로 확인할 수 있습니다. (OpenAI 로그인 필요)
 
 - GitHub Actions, Pages: 공개 저장소면 무료
 - OpenAI: 저장소 하나 정리에 입력 약 5천 토큰. 첫 실행은 최대 60개, 그 뒤로는 새로 뜬 저장소만 정리합니다.
