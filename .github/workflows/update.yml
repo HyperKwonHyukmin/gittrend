@@ -1,0 +1,76 @@
+name: Update trends
+
+on:
+  schedule:
+    - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 뉴스)
+    - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 AI 뉴스도 담기 위해)
+  workflow_dispatch:        # Actions 탭에서 수동 실행
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-trends
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # AI 정리가 중간에 멈춰도(키 오류, 크레딧 부족) 모은 데이터는 배포하고, 마지막에 실패로 표시한다
+      - name: Collect and summarize
+        id: collect
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_REASONING: ${{ vars.OPENAI_REASONING }}
+          MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
+          MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python collect.py
+
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data data
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git commit -m "data: $(TZ=Asia/Seoul date +%Y-%m-%d) 업데이트"
+          # 실행 중에 다른 커밋이 올라왔을 수 있으니 최신 내용 위에 얹어서 올린다
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep 5
+          done
+          exit 1
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Report collect failure
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo "::error::수집 또는 AI 정리 중 오류가 있었습니다. 위 'Collect and summarize' 로그를 확인하세요."
+          exit 1

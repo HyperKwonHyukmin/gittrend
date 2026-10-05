@@ -1,0 +1,4 @@
+# 데이터 파일이 Windows(PC)와 GitHub Actions(리눅스)에서 같은 줄바꿈을 쓰도록 한다
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
