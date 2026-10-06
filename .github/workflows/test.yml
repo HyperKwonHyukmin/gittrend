@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    paths: ["**.py", "docs/app.js", "tests/**", ".github/workflows/test.yml"]
+  pull_request:
+    paths: ["**.py", "docs/app.js", "tests/**", ".github/workflows/test.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: python -B -m unittest discover -s tests -v
+      - run: node --check docs/app.js
+      - run: node --test tests/detail-navigation.test.js

@@ -32,7 +32,7 @@ import collect as core
 
 PROFILE_PATH = os.path.join(core.ROOT, "profile.md")
 REQUEST_RE = re.compile(r"^\s*deep\s*:\s*([\w.-]+/[\w.-]+)\s*$", re.I)
-TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
+TRUSTED = {"OWNER"}
 
 DEEP_PROMPT = """너는 오픈소스를 실무에 도입할지 판단해 주는 시니어 엔지니어다.
 아래 자료(저장소 정보, README, 패키지 설정, 소스 일부, 문서, 예제, 이슈, Hacker News 댓글, 릴리스)를 꼼꼼히 읽고

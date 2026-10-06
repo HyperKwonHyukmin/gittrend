@@ -378,10 +378,12 @@ def run():
             log(f"  ! 뉴스 묶음 정리 실패: {e}")
             continue
         for i, a in enumerate(batch, 1):
-            seen[a["id"]] = today_s   # 응답에 빠진 기사도 다시 보내지 않는다
-            processed += 1
             r = res.get(i)
-            if not r or not r["keep"]:
+            if r is None:
+                continue  # 응답에서 빠진 기사는 다음 실행에 다시 처리한다
+            seen[a["id"]] = today_s
+            processed += 1
+            if not r["keep"]:
                 articles.pop(a["id"], None)
                 continue
             if r["dup"]:

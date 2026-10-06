@@ -475,10 +475,13 @@ def main():
     has_past = any(c.get("first_seen", today_s) < today_s for c in catalog.values())
 
     repos = {}   # key -> 오늘 화면에 쓸 정보
+    fresh_star_keys = set()  # 이번 실행에서 실제로 확인한 star 값만 기록한다
     lists = {k: [] for k in LIST_WEIGHTS}
 
-    def upsert(info):
+    def upsert(info, fresh=True):
         key = info["full_name"].lower()
+        if fresh and "stars" in info:
+            fresh_star_keys.add(key)
         r = repos.setdefault(key, {"full_name": info["full_name"], "period": {}, "sources": []})
         for f in ("description", "language", "stars", "forks", "topics", "license", "homepage",
                   "created_at", "pushed_at", "archived", "release"):
@@ -524,6 +527,7 @@ def main():
     # 4) 상세 정보 보강 (토픽, 라이선스, 생성일, 최신 릴리스). 일주일 지난 캐시만 다시 받는다.
     refresh_before = (today - dt.timedelta(days=META_REFRESH_DAYS)).isoformat()
     need = [k for k in repos if meta.get(k, {}).get("fetched", "") < refresh_before
+            or "stars" not in repos[k]
             or (gh_token and "release" not in meta.get(k, {}))]
     need.sort(key=lambda k: 0 if "stars" not in repos[k] else 1)  # HN 저장소는 정보가 없으니 먼저
     fetched = 0
@@ -537,6 +541,7 @@ def main():
         if gh_token:  # 토큰 없이는 호출 한도가 작아서 릴리스는 건너뛴다
             m["release"] = fetch_release(gh, m["full_name"])
         meta[key] = m
+        fresh_star_keys.add(key)
         fetched += 1
     log(f"상세 정보 갱신: {fetched}개"
         + (" (API 한도로 일부 생략, GITHUB_TOKEN을 넣으면 해결)" if gh.core_blocked else ""))
@@ -545,7 +550,7 @@ def main():
         m = meta.get(key)
         if m:
             keep = {f: repos[key][f] for f in ("stars", "forks") if f in repos[key]}  # 오늘 본 값이 더 최신
-            upsert(m)
+            upsert(m, fresh=False)
             repos[key].update(keep)
             repos[key]["full_name"] = m["full_name"]
         if "stars" not in repos[key]:
@@ -573,7 +578,8 @@ def main():
         log(f"추적 중인 저장소 star 갱신: {n}개")
 
     for key, r in repos.items():
-        history.setdefault(key, {})[today_s] = r["stars"]
+        if key in fresh_star_keys:
+            history.setdefault(key, {})[today_s] = r["stars"]
 
     def growth(key, days):
         h = history.get(key, {})
@@ -587,7 +593,7 @@ def main():
     rising = sorted(((g, k) for k in history if (g := growth(k, 1)) and g > 0), reverse=True)
     for _, key in rising[:30]:
         if key not in repos and key in meta:
-            upsert(meta[key])
+            upsert(meta[key], fresh=False)
         if key in repos:
             lists["rising"].append(key)
 
@@ -694,6 +700,9 @@ def main():
                     for k in hot[:30]]
             digest = {**make_digest(rows, set(repos)), "date": today_s}
             log("트렌드 요약 완료")
+        except AIFatal as e:
+            ai_error = str(e)
+            log(f"  ! 트렌드 요약 중단: {e}")
         except Exception as e:  # noqa: BLE001
             log(f"  ! 트렌드 요약 실패: {e}")
 

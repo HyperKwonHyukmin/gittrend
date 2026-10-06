@@ -672,7 +672,7 @@
       detailCache[slug] = d;
     }
     await loadSpark();
-    if (keyOfSlug(slug) !== key || !location.hash.startsWith("#/r/")) return; // 기다리는 사이 다른 화면으로 이동함
+    if (location.hash !== `#/r/${encodeURIComponent(slug)}`) return; // 기다리는 사이 다른 저장소나 화면으로 이동함
 
     const r = base;
     const s = d.summary;
