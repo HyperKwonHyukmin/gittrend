@@ -489,7 +489,7 @@
     if (!code || !String(code).trim()) return "";
     return `
       <div class="code">
-        <div class="code-label">${esc(label)}${lang ? ` · ${esc(lang)}` : ""}</div>
+        <div class="code-label">${esc(label)}${lang ? `${label ? " · " : ""}${esc(lang)}` : ""}</div>
         <pre><code>${esc(String(code).trim())}</code></pre>
         <button class="copy" type="button">복사</button>
       </div>`;
@@ -727,7 +727,12 @@
       </article>`;
     bindBack();
     bindCards($app);
-    $app.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
+    bindCopy($app);
+  }
+
+  function bindCopy(root) {
+    root.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async e => {
+      e.preventDefault();
       const text = b.parentElement.querySelector("code").textContent;
       try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; }
       catch (_) { b.textContent = "복사 실패"; }
@@ -760,28 +765,15 @@
     toast(n ? `관심 라이브러리 ${n}개를 가져왔어요` : "새로 가져올 라이브러리가 없어요");
   }
 
-  // ------------------------------------------------------------ AI 뉴스 (#/news)
+  // ------------------------------------------------------------ AI 레이더 (#/news)
 
-  const NEWS_PAGE = 60;
-  const REGIONS = [
-    { id: "", label: "모든 출처" },
-    { id: "kr", label: "국내 기사" },
-    { id: "global", label: "해외 기사" },
-    { id: "community", label: "커뮤니티·논문" },
-  ];
-  const COMMUNITY = new Set(["Hacker News", "Hugging Face 논문", "GeekNews", "Threads"]);
+  const NEWS_PAGE = 50;
+  const KIND_ICON = { "새 모델": "🆕", "도구·라이브러리": "📦", "사용법·팁": "💡", "업계 흐름": "📈" };
   let news = null;
-  const newsState = { topic: "", region: "", sort: "latest", important: false, shown: NEWS_PAGE };
+  const newsState = { kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
   const readNews = new Set(store.get("gittrend:read", []));
-  // 영어 기사: 기본은 원문, 설정을 켜면 처음부터 한국어. 기사마다 버튼으로 바꾼 것은 이 화면에서만 기억한다.
-  let enKo = store.get("gittrend:enko", false) === true;
-  const flipped = new Set();
 
-  const regionOf = a => COMMUNITY.has(a.origin) ? "community" : /[가-힣]/.test(a.title) ? "kr" : "global";
   const newsTitle = a => a.title_ko || a.title;
-  const isEnglish = a => !/[가-힣]/.test(a.title);
-  const hasKo = a => !!(a.title_ko || a.summary);
-  const showsKo = a => enKo !== flipped.has(a.id);
 
   function timeText(iso) {
     const t = new Date(iso);
@@ -802,11 +794,12 @@
   function filteredNews() {
     const q = state.q.trim().toLowerCase();
     let rows = (news.articles || []).filter(a => {
-      if (newsState.topic && a.topic !== newsState.topic) return false;
-      if (newsState.region && regionOf(a) !== newsState.region) return false;
+      if (newsState.kind && a.kind !== newsState.kind) return false;
       if (newsState.important && !(a.importance >= 4)) return false;
       if (!q) return true;
-      return [a.title, a.title_ko, a.summary, a.snippet, a.source, a.topic].join(" ").toLowerCase().includes(q);
+      const c = a.card || {};
+      return [a.title, a.title_ko, a.summary, a.snippet, a.source, a.kind, c.what, c.why, ...(c.points || [])]
+        .join(" ").toLowerCase().includes(q);
     });
     if (newsState.sort === "important") {
       rows = [...rows].sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.published.localeCompare(a.published));
@@ -814,53 +807,79 @@
     return rows;
   }
 
+  // 새 모델: 컨텍스트 길이와 가격 (OpenRouter 기준, 100만 토큰당 달러)
+  function modelFacts(m) {
+    if (!m) return "";
+    const ctx = m.context >= 1e6 ? `${+(m.context / 1e6).toFixed(1)}M` : m.context >= 1000 ? `${Math.round(m.context / 1000)}K` : m.context;
+    const price = v => v == null ? "?" : v === 0 ? "무료" : `$${v}`;
+    return `<div class="model-facts">
+      ${m.context ? `<span>컨텍스트 <b>${esc(String(ctx))}</b></span>` : ""}
+      ${m.price_in != null ? `<span>입력 <b>${price(m.price_in)}</b> · 출력 <b>${price(m.price_out)}</b> <small>/ 100만 토큰</small></span>` : ""}
+    </div>`;
+  }
+
+  function radarCardHtml(c) {
+    const t = c.try || {};
+    return `
+      <div class="radar-card">
+        <p class="rc-what">${esc(c.what)}</p>
+        ${c.why ? `<p class="why">${esc(c.why)}</p>` : ""}
+        ${(c.points || []).length ? `<div class="rc-block"><b>핵심</b>${listHtml(c.points)}</div>` : ""}
+        ${t.desc || t.code ? `<div class="rc-block"><b>바로 써 보기</b>${t.desc ? `<p>${esc(t.desc)}</p>` : ""}${codeBlock("", t.lang, t.code)}</div>` : ""}
+        ${(c.caveats || []).length ? `<div class="rc-block"><b>주의점</b>${listHtml(c.caveats)}</div>` : ""}
+        ${c.fit ? `<div class="rc-fit"><b>내 작업에 맞을까?</b><p>${esc(c.fit)}</p></div>` : ""}
+        <p class="rc-note">${c.from_body ? "원문을 읽고 AI가 정리했어요." : "원문을 읽지 못해 제목과 요약문만으로 정리했어요."} 틀린 내용이 있을 수 있어요.</p>
+      </div>`;
+  }
+
   function newsItemHtml(a) {
     const imp = a.importance || 0;
     const link = esc(safeUrl(a.link));
-    const en = isEnglish(a) && hasKo(a);
-    let titleHtml, bodyHtml;
-    if (en) {
-      // 영어 기사: 원문과 한국어를 둘 다 그려 두고 버튼으로 바꿔 보여준다
-      titleHtml = `<span class="v-orig" lang="en">${esc(a.title)}</span><span class="v-ko">${esc(a.title_ko || a.title)}</span>`;
-      bodyHtml = `${a.snippet ? `<p class="news-sum v-orig" lang="en">${esc(a.snippet)}${a.snippet.length >= 300 ? "…" : ""}</p>` : ""}
-        ${a.summary ? `<p class="news-sum v-ko">${esc(a.summary)}</p>` : ""}`;
-    } else {
-      const retitled = a.title_ko && a.title_ko !== a.title;
-      titleHtml = esc(newsTitle(a));
-      bodyHtml = `${retitled ? `<p class="news-orig">${esc(a.title)}</p>` : ""}
-        ${a.summary ? `<p class="news-sum">${esc(a.summary)}</p>` : ""}`;
-    }
+    const retitled = a.title_ko && a.title_ko !== a.title;
+    const head = `
+      <div class="news-meta">
+        ${imp >= 4 ? '<span class="badge-hot">주요</span>' : ""}
+        ${a.kind ? `<span class="chip cat">${KIND_ICON[a.kind] || ""} ${esc(a.kind)}</span>` : ""}
+        <span class="news-src">${esc(a.source)}</span>
+        <span>${timeText(a.published)}</span>
+        ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
+      </div>`;
+    const titles = `
+      <h3>${esc(newsTitle(a))}</h3>
+      ${retitled ? `<p class="news-orig">${esc(a.title)}</p>` : ""}
+      ${a.summary ? `<p class="news-sum">${esc(a.summary)}</p>` : !a.ai && a.snippet ? `<p class="news-sum">${esc(a.snippet)}</p>` : ""}`;
+    const foot = `
+      <p class="news-extra">
+        <a href="${link}" target="_blank" rel="noopener" data-read="${esc(a.id)}">원문 ↗</a>
+        ${a.hn_url ? `<a href="${esc(safeUrl(a.hn_url))}" target="_blank" rel="noopener">HN ${fmt(a.hn_points)}점 · 토론</a>` : ""}
+      </p>
+      ${(a.related || []).length ? `
+      <details class="related">
+        <summary>같은 소식 ${a.related.length}건 더</summary>
+        <ul>${a.related.map(r => `<li><a href="${esc(safeUrl(r.link))}" target="_blank" rel="noopener">${esc(r.title)}</a> <span>${esc(r.source)}</span></li>`).join("")}</ul>
+      </details>` : ""}`;
+    // 카드가 있으면 제목을 눌러 페이지 안에서 펼쳐 읽는다. 원문은 아래 작은 링크로만.
+    const body = a.card ? `
+      <details class="radar" data-open="${esc(a.id)}">
+        <summary>${head}${titles}<span class="rc-toggle">자세히 보기</span></summary>
+        ${radarCardHtml(a.card)}
+      </details>` : `${head}${titles}`;
     return `
-      <article class="news-item ${readNews.has(a.id) ? "read" : ""} ${en ? "en" : ""} ${en && showsKo(a) ? "show-ko" : ""}" id="n-${esc(a.id)}">
-        <div class="news-meta">
-          ${imp >= 4 ? '<span class="badge-hot">주요</span>' : ""}
-          ${a.topic ? `<span class="chip cat">${esc(a.topic)}</span>` : ""}
-          <span class="news-src">${esc(a.source)}</span>
-          <span>${timeText(a.published)}</span>
-          ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
-          ${en ? `<button type="button" class="tr-btn" data-tr="${esc(a.id)}" aria-pressed="${showsKo(a)}">${showsKo(a) ? "원문 보기" : "한국어로 보기"}</button>` : ""}
-        </div>
-        <h3><a href="${link}" target="_blank" rel="noopener" data-read="${esc(a.id)}">${titleHtml}</a></h3>
-        ${bodyHtml}
-        ${a.hn_url || a.upvotes ? `<p class="news-extra">
-          ${a.hn_url ? `<a href="${esc(safeUrl(a.hn_url))}" target="_blank" rel="noopener">HN ${fmt(a.hn_points)}점 · 토론 보기</a>` : ""}
-          ${a.upvotes ? `<span>추천 ${fmt(a.upvotes)}</span>` : ""}</p>` : ""}
-        ${(a.related || []).length ? `
-        <details class="related">
-          <summary>같은 소식 ${a.related.length}건 더</summary>
-          <ul>${a.related.map(r => `<li><a href="${esc(safeUrl(r.link))}" target="_blank" rel="noopener">${esc(r.title)}</a> <span>${esc(r.source)}</span></li>`).join("")}</ul>
-        </details>` : ""}
+      <article class="news-item ${readNews.has(a.id) ? "read" : ""}" id="n-${esc(a.id)}">
+        ${body}
+        ${modelFacts(a.model)}
+        ${foot}
       </article>`;
   }
 
   function briefHtml() {
     const b = news.brief;
-    if (!b || state.q || newsState.topic || newsState.region || newsState.important) return "";
+    if (!b || state.q || newsState.kind || newsState.important) return "";
     const byId = Object.fromEntries((news.articles || []).map(a => [a.id, a]));
     const short = a => { const t = newsTitle(a); return t.length > 22 ? t.slice(0, 22) + "…" : t; };
     return `
       <section class="digest">
-        <div class="digest-k">오늘의 AI 브리핑 · AI 요약</div>
+        <div class="digest-k">오늘의 AI 레이더 · AI 요약</div>
         <h2>${esc(b.headline)}</h2>
         ${b.summary ? `<p>${esc(b.summary)}</p>` : ""}
         ${(b.themes || []).length ? `<div class="themes">${b.themes.map(t => `
@@ -873,6 +892,12 @@
       </section>`;
   }
 
+  function markRead(id, el) {
+    readNews.add(id);
+    store.set("gittrend:read", [...readNews].slice(-1500));
+    el?.classList.add("read");
+  }
+
   async function renderNews() {
     if (!news) {
       $app.innerHTML = `<p class="loading">불러오는 중…</p>`;
@@ -881,14 +906,14 @@
     }
     const all = news.articles || [];
     const rows = filteredNews();
-    const topicCounts = {};
-    for (const a of all) if (a.topic) topicCounts[a.topic] = (topicCounts[a.topic] || 0) + 1;
-    const topics = (news.topics || []).filter(t => topicCounts[t]);
+    const kindCounts = {};
+    for (const a of all) if (a.kind) kindCounts[a.kind] = (kindCounts[a.kind] || 0) + 1;
+    const kinds = (news.kinds || []).filter(k => kindCounts[k]);
     const page = rows.slice(0, newsState.shown);
 
     let body;
     if (!rows.length) {
-      body = `<p class="empty">${all.length ? "조건에 맞는 기사가 없어요." : "아직 모은 기사가 없어요. 수집기(collect.py)를 실행해 주세요."}</p>`;
+      body = `<p class="empty">${all.length ? "조건에 맞는 소식이 없어요." : "아직 모은 소식이 없어요. 수집기(collect.py)를 실행해 주세요."}</p>`;
     } else if (newsState.sort === "important") {
       body = `<div class="news-list">${page.map(newsItemHtml).join("")}</div>`;
     } else {
@@ -901,39 +926,32 @@
       }
       body = groups.map(g => `<h2 class="day">${esc(g.label)}</h2><div class="news-list">${g.items.map(newsItemHtml).join("")}</div>`).join("");
     }
-    const off = Object.entries(news.sources || {}).filter(([, v]) => v === "키 없음").map(([k]) => k);
 
     $app.innerHTML = `
-      <p class="tab-desc news-desc">Google 뉴스, AI 전문 매체, 개발자 커뮤니티에서 AI 소식을 모아 AI가 한국어로 정리했어요.
-        새 기사만 한 번 정리하고, 원문은 각 언론사 사이트에서 읽어요.</p>
+      <p class="tab-desc news-desc">새 모델, 새 도구·라이브러리, 바로 써먹을 수 있는 사용법을 공식 발표·릴리스·개발자 커뮤니티에서 모았어요.
+        주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.</p>
       ${briefHtml()}
       <div class="topic-chips">
-        <button type="button" class="tchip" data-topic="" aria-pressed="${!newsState.topic}">전체 <span>${all.length}</span></button>
-        ${topics.map(t => `<button type="button" class="tchip" data-topic="${esc(t)}" aria-pressed="${newsState.topic === t}">${esc(t)} <span>${topicCounts[t]}</span></button>`).join("")}
+        <button type="button" class="tchip" data-kind="" aria-pressed="${!newsState.kind}">전체 <span>${all.length}</span></button>
+        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
       </div>
       <div class="filters">
-        <select id="region" aria-label="출처">
-          ${REGIONS.map(r => `<option value="${r.id}" ${r.id === newsState.region ? "selected" : ""}>${r.label}</option>`).join("")}
-        </select>
         <select id="nsort" aria-label="정렬">
           <option value="latest" ${newsState.sort === "latest" ? "selected" : ""}>최신순</option>
           <option value="important" ${newsState.sort === "important" ? "selected" : ""}>중요도순</option>
         </select>
-        ${all.some(a => a.ai) ? `<button type="button" class="toggle" id="important" aria-pressed="${newsState.important}">주요 뉴스만</button>` : ""}
-        ${all.some(a => isEnglish(a) && hasKo(a)) ? `<button type="button" class="toggle" id="en-ko" aria-pressed="${enKo}" title="영어 기사를 처음부터 한국어 번역으로 보여줘요">영어 기사 한국어로</button>` : ""}
+        ${all.some(a => a.ai) ? `<button type="button" class="toggle" id="important" aria-pressed="${newsState.important}">주요 소식만</button>` : ""}
         <span class="count">${rows.length}건</span>
       </div>
       ${body}
       ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}
       <p class="news-foot">
         ${news.ai_enabled ? "" : "AI 정리가 꺼져 있어 원문 제목만 보여요. "}
-        ${off.length ? `${esc(off.join(", "))}은(는) 키를 설정하면 함께 모아요. ` : ""}
-        AI 요약은 제목과 요약문을 바탕으로 해서 틀릴 수 있으니, 중요한 내용은 원문을 확인해 주세요.
+        AI 정리는 틀릴 수 있으니, 중요한 내용은 원문을 확인해 주세요.
       </p>`;
 
     const rerender = () => { newsState.shown = NEWS_PAGE; renderNews(); };
-    $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => { newsState.topic = b.dataset.topic; rerender(); }));
-    $app.querySelector("#region")?.addEventListener("change", e => { newsState.region = e.target.value; rerender(); });
+    $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => { newsState.kind = b.dataset.kind; rerender(); }));
     $app.querySelector("#nsort")?.addEventListener("change", e => { newsState.sort = e.target.value; rerender(); });
     $app.querySelector("#important")?.addEventListener("click", () => { newsState.important = !newsState.important; rerender(); });
     $app.querySelector("#more")?.addEventListener("click", () => {
@@ -941,31 +959,17 @@
       newsState.shown += NEWS_PAGE;
       renderNews().then(() => window.scrollTo(0, y));
     });
-    $app.querySelector("#en-ko")?.addEventListener("click", () => {
-      enKo = !enKo;
-      flipped.clear();
-      store.set("gittrend:enko", enKo);
-      const y = window.scrollY;
-      renderNews().then(() => window.scrollTo(0, y));
-    });
-    $app.querySelectorAll("[data-tr]").forEach(b => b.addEventListener("click", () => {
-      const id = b.dataset.tr;
-      if (flipped.has(id)) flipped.delete(id); else flipped.add(id);
-      const on = enKo !== flipped.has(id);
-      b.closest(".news-item").classList.toggle("show-ko", on);
-      b.setAttribute("aria-pressed", on);
-      b.textContent = on ? "원문 보기" : "한국어로 보기";
+    $app.querySelectorAll("details.radar").forEach(d => d.addEventListener("toggle", () => {
+      d.querySelector(".rc-toggle").textContent = d.open ? "접기" : "자세히 보기";
+      if (d.open) markRead(d.dataset.open, d.closest(".news-item"));
     }));
-    $app.querySelectorAll("[data-read]").forEach(a => a.addEventListener("click", () => {
-      readNews.add(a.dataset.read);
-      store.set("gittrend:read", [...readNews].slice(-1500));
-      a.closest(".news-item")?.classList.add("read");
-    }));
+    $app.querySelectorAll("[data-read]").forEach(a => a.addEventListener("click", () => markRead(a.dataset.read, a.closest(".news-item"))));
+    bindCopy($app);
     $app.querySelectorAll("[data-jump]").forEach(a => a.addEventListener("click", async e => {
       e.preventDefault();
       const id = a.dataset.jump;
       if (!document.getElementById("n-" + id)) {
-        // 아직 펼치지 않은 뒤쪽 기사면 거기까지 펼친다
+        // 아직 펼치지 않은 뒤쪽 항목이면 거기까지 펼친다
         const idx = filteredNews().findIndex(x => x.id === id);
         if (idx < 0) return;
         newsState.shown = Math.ceil((idx + 1) / NEWS_PAGE) * NEWS_PAGE;
@@ -973,7 +977,9 @@
       }
       const el = document.getElementById("n-" + id);
       if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const card = el.querySelector("details.radar");
+      if (card) card.open = true;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
       el.classList.add("flash");
       setTimeout(() => el.classList.remove("flash"), 1600);
     }));
@@ -983,7 +989,7 @@
   //   #/            처음 화면 (마지막에 본 탭)
   //   #/t/<탭>      라이브러리 목록
   //   #/r/<저장소>  라이브러리 상세
-  //   #/news        AI 뉴스
+  //   #/news        AI 레이더 (새 모델 · 도구 · 사용법)
   //   #/import/...  관심 목록 가져오기
 
   let listScroll = 0;
@@ -993,9 +999,9 @@
 
   function setSection(name) {
     document.querySelectorAll(".sec").forEach(a => a.setAttribute("aria-current", a.dataset.sec === name ? "page" : "false"));
-    $q.placeholder = name === "news" ? "기사 제목, 내용, 언론사로 찾기" : "이름, 설명, 태그로 찾기";
+    $q.placeholder = name === "news" ? "모델, 도구, 내용으로 찾기" : "이름, 설명, 태그로 찾기";
     document.getElementById("sources").textContent = name === "news"
-      ? "출처: Google 뉴스 · AI타임스 · GeekNews · TechCrunch · The Verge · Hacker News · Hugging Face 논문"
+      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News"
       : "출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록";
   }
 

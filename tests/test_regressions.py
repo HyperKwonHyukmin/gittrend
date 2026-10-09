@@ -16,7 +16,7 @@ class NewsTests(unittest.TestCase):
                             dt.datetime.now(collect.KST))
         files = {}
         result = {1: {"keep": True, "dup": 0, "title_ko": "AI launch",
-                      "summary": "test", "topic": "기타", "importance": 3}}
+                      "summary": "test", "kind": "업계 흐름", "importance": 2}}
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock"}))
             stack.enter_context(patch.object(news, "SOURCES", [("test", lambda: [article])]))
@@ -49,6 +49,53 @@ class NewsTests(unittest.TestCase):
             news.run()
         self.assertEqual(files[news.NEWS_PATH]["articles"], [])
         self.assertIn(article["id"], files[news.SEEN_PATH])
+
+    def run_news(self, files, articles, judge_result=None, card=None):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock"}))
+            stack.enter_context(patch.object(news, "SOURCES", [("test", lambda: articles)]))
+            stack.enter_context(patch.object(collect, "read_json", side_effect=lambda p, d: files.get(p, d)))
+            for name in ("write_json", "write_json_lines"):
+                stack.enter_context(patch.object(collect, name, side_effect=lambda p, d: files.update({p: d})))
+            stack.enter_context(patch.object(news, "ai_judge", return_value=judge_result or {}))
+            stack.enter_context(patch.object(news, "ai_brief", side_effect=ValueError("skip")))
+            stack.enter_context(patch.object(news, "fetch_body", return_value="본문"))
+            stack.enter_context(patch.object(deep, "read_profile", return_value=""))
+            ai_card = stack.enter_context(patch.object(news, "ai_card", side_effect=card or [{"what": "카드"}]))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            news.run()
+        return ai_card
+
+    def test_important_items_get_a_card_once(self):
+        article = news.make("New model", "https://example.test/m", "test", dt.datetime.now(collect.KST))
+        files = {}
+        judged = {1: {"keep": True, "dup": 0, "title_ko": "새 모델", "summary": "s", "kind": "새 모델", "importance": 4}}
+        first = self.run_news(files, [article], judged)
+        self.assertEqual(first.call_count, 1)
+        self.assertEqual(files[news.NEWS_PATH]["articles"][0]["card"], {"what": "카드"})
+        again = self.run_news(files, [article])
+        again.assert_not_called()
+
+    def test_card_failures_are_retried_then_given_up(self):
+        article = news.make("New tool", "https://example.test/t", "test", dt.datetime.now(collect.KST))
+        files = {}
+        judged = {1: {"keep": True, "dup": 0, "title_ko": "새 도구", "summary": "s", "kind": "도구·라이브러리", "importance": 3}}
+        self.run_news(files, [article], judged, card=RuntimeError("x"))
+        self.run_news(files, [article], card=RuntimeError("x"))
+        third = self.run_news(files, [article])
+        third.assert_not_called()
+        self.assertNotIn("card", files[news.NEWS_PATH]["articles"][0])
+
+    def test_old_format_news_is_replaced(self):
+        old = {"id": "old1", "title": "투자 소식", "link": "https://example.test/o", "source": "x",
+               "published": dt.datetime.now(collect.KST).isoformat(timespec="minutes"),
+               "ai": True, "topic": "기업·투자", "importance": 5}
+        files = {news.NEWS_PATH: {"topics": ["기업·투자"], "articles": [old], "brief": {"date": "x"}}}
+        self.run_news(files, [])
+        saved = files[news.NEWS_PATH]
+        self.assertEqual(saved["articles"], [])
+        self.assertEqual(saved["kinds"], news.KINDS)
+        self.assertIsNone(saved["brief"])
 
 
 class CollectorTests(unittest.TestCase):

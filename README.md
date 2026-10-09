@@ -1,6 +1,6 @@
 # GitTrend
 
-GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **무엇인지 · 왜 뜨는지 · 주요 특징 · 사용법 · 비슷한 도구 · 주의점**을 한국어로 정리해 주는 대시보드입니다. 최근 **AI 뉴스**도 모아서 한국어로 요약합니다. PC와 모바일 모두에서 볼 수 있습니다.
+GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **무엇인지 · 왜 뜨는지 · 주요 특징 · 사용법 · 비슷한 도구 · 주의점**을 한국어로 정리해 주는 대시보드입니다. **AI 레이더**에서는 새 모델 · 새 도구 · 유용한 사용법을 모아 페이지 안에서 바로 읽을 수 있게 정리합니다. PC와 모바일 모두에서 볼 수 있습니다.
 
 ## 탭과 데이터 출처
 
@@ -43,42 +43,26 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 - 각 저장소 상세 화면 아래에도 "비슷한 라이브러리"가 나옵니다.
 - 관심 목록은 **각 기기의 브라우저에만** 저장됩니다. ★ 관심 탭 맨 아래 "다른 기기로 옮기기" 링크를 폰에서 열면 같은 목록을 가져옵니다.
 
-## AI 뉴스
+## AI 레이더
 
-상단의 **AI 뉴스**를 누르면 최근 AI 기사와 트렌드를 볼 수 있습니다.
+상단의 **AI 레이더**를 누르면 **새 모델 · 도구·라이브러리 · 사용법·팁 · 업계 흐름**을 볼 수 있습니다. 일반 언론 기사 대신, 직접 써먹을 수 있는 소식이 나오는 곳만 모읍니다. 키는 필요 없습니다.
 
-| 출처 | 방식 | 키 |
-|---|---|---|
-| Google 뉴스 (국내·해외) | RSS | 필요 없음 |
-| AI타임스, TechCrunch AI, The Verge AI | RSS | 필요 없음 |
-| GeekNews (AI 관련 글만) | RSS | 필요 없음 |
-| Hacker News (AI 화제글), Hugging Face 오늘의 논문 | 공개 API | 필요 없음 |
-| 네이버 뉴스 | 네이버 검색 API | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` |
-| Threads | Threads API 키워드 검색 | `THREADS_ACCESS_TOKEN` |
+| 분류 | 출처 |
+|---|---|
+| 새 모델 | OpenRouter 모델 목록 (등록일·가격·컨텍스트 길이), Hugging Face 인기 모델 (양자화·변환본 제외) |
+| 공식 발표 | OpenAI, Google DeepMind, Google AI, Hugging Face 블로그 |
+| 도구 릴리스 | Claude Code, Codex CLI, OpenAI Python SDK, Ollama, Vite, React, Playwright, Capacitor의 GitHub 릴리스 (시험판 제외, `news.py`의 `TOOL_REPOS`에서 바꿀 수 있음) |
+| 사용법·흐름 | Simon Willison, Latent Space, GeekNews (AI 글만), Hacker News (AI 화제글) |
 
-- **AI는 기사 하나당 한 번만** 씁니다. 새 기사를 40건씩 묶어 한 번에 보내서, AI 관련 여부·같은 사건 묶기·한국어 제목·1~2문장 요약·주제·중요도(1~5)를 받습니다. 처리한 기사는 `data/news_seen.json`에 기록해 다시 보내지 않습니다. "오늘의 AI 브리핑"은 하루 한 번 만듭니다.
-- 기사 본문은 가져오지 않습니다. 제목과 RSS 요약문만으로 정리하고 원문으로 링크합니다.
-- 화면에서는 주제별 보기, 국내/해외/커뮤니티·논문 출처 고르기, 최신순/중요도순, "주요 뉴스만", 같은 소식 묶음, 읽은 기사 흐리게 표시를 쓸 수 있습니다.
-- 뉴스는 하루 두 번(오전 7시, 오후 6시) 모읍니다. 최근 14일치를 보여줍니다.
-
-### 네이버 키 받기 (무료, 하루 2만5천 회)
-
-1. https://developers.naver.com 에 로그인 → **Application → 애플리케이션 등록**
-2. 사용 API에서 **검색**을 고르고, 환경은 **WEB 설정**에 아무 주소(예: `https://<아이디>.github.io`)나 넣습니다.
-3. 발급된 **Client ID**와 **Client Secret**을 저장소 Secrets의 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`에 넣습니다.
-
-### Threads 토큰 받기 (선택, 번거로움)
-
-1. https://developers.facebook.com 에서 앱을 만들고 **Threads API** 사용 사례를 추가합니다.
-2. 권한 `threads_basic`, `threads_keyword_search`를 추가하고, 내 Threads 계정을 테스터로 등록한 뒤 액세스 토큰을 발급합니다.
-3. 장기 토큰(60일)을 저장소 Secrets의 `THREADS_ACCESS_TOKEN`에 넣습니다. **60일마다 다시 넣어야** 합니다.
-4. Meta의 앱 심사를 통과하기 전에는 키워드 검색 결과가 제한될 수 있습니다(본인 글 위주).
+- **판단:** 새 항목을 40건씩 묶어 한 번에 보내서 남길지(투자·소송·정책·홍보는 뺌), 같은 소식 묶기, 한국어 제목, 1~2문장 요약, 분류, 중요도(1~5)를 받습니다. 처리한 항목은 `data/news_seen.json`에 기록해 다시 보내지 않습니다.
+- **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 12)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
+- "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 하루 두 번(오전 7시, 오후 6시) 모으고, 최근 30일치를 보여줍니다.
 
 ## 구조
 
 ```
 collect.py                    라이브러리 수집 + AI 정리 (Python 표준 라이브러리만 사용)
-news.py                       AI 뉴스 수집 + AI 정리 (collect.py가 마지막에 실행)
+news.py                       AI 레이더 수집 + AI 판단·카드 (collect.py가 마지막에 실행)
 deep.py                       심층 분석 (collect.py가 마지막에 실행, 요청 이슈가 열리면 단독 실행)
 profile.md                    내 작업 프로필 ("내 작업에 맞을까?" 판단 기준)
 docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
@@ -87,10 +71,10 @@ docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
   data/catalog.json           지금까지 본 모든 저장소 (추천, 예전 저장소 보기에 사용)
   data/spark.json             최근 30일 star 변화
   data/repos/*.json           저장소별 AI 정리 (한 번 만들면 그대로 보관)
-  data/news.json              AI 뉴스 (최근 14일) + 오늘의 브리핑
+  data/news.json              AI 레이더 (최근 30일) + 오늘의 요약
 data/history.json             날짜별 star 기록 (60일 보관)
 data/meta.json                저장소 상세 정보 캐시
-data/news_seen.json           AI로 처리한 기사 기록 (다시 보내지 않기 위함)
+data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 않기 위함)
 .github/workflows/update.yml  매일 오전 7시·오후 6시(한국시간) 자동 수집 → 배포
 ```
 
@@ -108,9 +92,8 @@ data/news_seen.json           AI로 처리한 기사 기록 (다시 보내지 �
 1. GitHub에 **Public** 저장소를 만들고 이 폴더를 올립니다. (`.env`는 `.gitignore`에 있어서 올라가지 않습니다.)
 2. 저장소 **Settings → Secrets and variables → Actions**
    - Secrets 탭: `OPENAI_API_KEY` 추가
-   - Secrets 탭 (선택): `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `THREADS_ACCESS_TOKEN`
    - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
-     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 1)
+     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 12)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
    끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로는 매일 오전 7시와 오후 6시에 자동으로 갱신됩니다.
@@ -126,4 +109,4 @@ data/news_seen.json           AI로 처리한 기사 기록 (다시 보내지 �
 
 - GitHub Actions, Pages: 공개 저장소면 무료
 - OpenAI: 저장소 하나 정리에 입력 약 5천 토큰. 첫 실행은 최대 60개, 그 뒤로는 새로 뜬 저장소만 정리합니다.
-  AI 뉴스는 기사 40건을 한 번에 보내므로 기사당 비용이 작고, 하루 새 기사 200~300건 기준 호출 5~8번 정도입니다. platform.openai.com의 **Limits**에서 월 사용 한도를 걸어 두기를 권장합니다.
+  AI 레이더는 판단을 40건씩 묶어 보내고(하루 2~4번), 카드는 실행마다 최대 12건(한 건에 입력 약 3~5천 토큰)만 만듭니다. platform.openai.com의 **Limits**에서 월 사용 한도를 걸어 두기를 권장합니다.

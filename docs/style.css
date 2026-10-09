@@ -222,7 +222,7 @@ button { font: inherit; color: inherit; }
   display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   margin-bottom: 14px;
 }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .stat .k { font-size: 12.5px; color: var(--ink-3); }
 .stat .v { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat .v.good { color: var(--good); }
@@ -349,7 +349,7 @@ ol.steps li::marker { color: var(--accent); font-weight: 800; }
 .sec:hover { color: var(--ink); }
 .sec[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 
-/* ---------- AI 뉴스 */
+/* ---------- AI 레이더 */
 .news-desc { margin-top: 18px; }
 .topic-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 0; }
 .tchip {
@@ -378,22 +378,40 @@ ol.steps li::marker { color: var(--accent); font-weight: 800; }
 .imp { color: var(--accent); letter-spacing: 1px; font-size: 9px; }
 .imp i { font-style: normal; color: var(--line); }
 .news-item h3 { font-size: 16.5px; line-height: 1.45; margin: 6px 0 0; letter-spacing: -.01em; }
-.news-item h3 a { text-decoration: none; }
-.news-item h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.news-item.read h3 a { color: var(--ink-3); font-weight: 600; }
 .news-orig { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-3); }
-/* 영어 기사: 원문 ↔ 한국어 */
-.news-item.en:not(.show-ko) .v-ko,
-.news-item.en.show-ko .v-orig { display: none; }
-.tr-btn {
-  margin-left: auto; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
-  color: var(--accent-ink); background: var(--accent-soft); border: 0; border-radius: 999px; padding: 3px 10px;
-}
-.tr-btn:hover { filter: brightness(.96); }
-.tr-btn[aria-pressed="true"] { color: var(--ink-2); background: var(--surface-2); }
 .news-sum { margin: 6px 0 0; color: var(--ink-2); font-size: 14.5px; }
-.news-extra { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); display: flex; gap: 12px; }
-.news-extra a { color: var(--hn); text-decoration: none; }
+.news-extra { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.news-extra a { color: var(--ink-3); text-decoration: none; }
+.news-extra a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+.news-extra a[href*="ycombinator"] { color: var(--hn); }
+
+/* 카드가 있는 항목: 제목 영역 전체를 눌러 페이지 안에서 펼친다 */
+details.radar > summary { list-style: none; cursor: pointer; }
+details.radar > summary::-webkit-details-marker { display: none; }
+details.radar > summary:hover h3 { color: var(--accent-ink); }
+.news-item.read h3 { color: var(--ink-3); font-weight: 600; }
+.rc-toggle {
+  display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--accent-ink);
+  background: var(--accent-soft); border-radius: 999px; padding: 3px 11px;
+}
+.rc-toggle::after { content: " ▾"; }
+details.radar[open] .rc-toggle::after { content: " ▴"; }
+.radar-card {
+  margin-top: 12px; padding: 14px 16px; border-radius: 12px; background: var(--surface-2);
+  font-size: 14.5px; min-width: 0;
+}
+.radar-card p { margin: 0 0 8px; }
+.rc-what { font-weight: 600; }
+.rc-block { margin-top: 12px; min-width: 0; }
+.rc-block > b, .rc-fit > b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.rc-block ul { margin: 0; padding-left: 18px; color: var(--ink-2); }
+.rc-block li { margin: 3px 0; }
+.rc-block .code { margin: 6px 0 0; }
+.rc-fit { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.rc-fit p { margin: 0; color: var(--ink-2); }
+.rc-note { margin: 12px 0 0 !important; font-size: 12px; color: var(--ink-3); }
+.model-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.model-facts small { color: var(--ink-3); }
 .related { margin-top: 8px; font-size: 13.5px; }
 .related summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }
 .related ul { margin: 6px 0 0; padding-left: 18px; }
@@ -431,13 +449,14 @@ ol.steps li::marker { color: var(--accent); font-weight: 800; }
 .fit-grid b { font-size: 13.5px; }
 .fit-grid ul { margin: 4px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); }
 
-.apis { display: grid; gap: 10px; }
-.api { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; }
+/* 그리드 칸은 기본으로 내용 폭만큼 늘어나므로, 긴 시그니처·예시 코드가 박스 밖으로 밀지 않게 막는다 */
+.apis { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.api { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; min-width: 0; }
 .api-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .api-name { font: 600 14px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--accent-ink); overflow-wrap: anywhere; }
 .api-sig {
   margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--surface); overflow-x: auto;
-  font: 12.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre; word-break: normal; overflow-wrap: normal;
+  font: 12.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere;
 }
 .api p { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; }
 .api .code { margin-bottom: 0; }

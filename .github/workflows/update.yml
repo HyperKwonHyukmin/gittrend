@@ -2,8 +2,8 @@ name: Update trends
 
 on:
   schedule:
-    - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 뉴스)
-    - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 AI 뉴스도 담기 위해)
+    - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 레이더)
+    - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 새 모델·릴리스도 담기 위해)
   workflow_dispatch:        # Actions 탭에서 수동 실행
   issues:
     types: [opened]         # 페이지의 [심층 분석 요청] 버튼이 연 이슈 → 바로 분석
@@ -51,9 +51,7 @@ jobs:
           DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
-          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
-          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
-          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          MAX_NEWS_CARDS: ${{ vars.MAX_NEWS_CARDS }}
         run: python collect.py
 
       # 심층 분석 요청 이슈만 처리 (수집은 하지 않음)
@@ -71,9 +69,7 @@ jobs:
           DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
-          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
-          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
-          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          MAX_NEWS_CARDS: ${{ vars.MAX_NEWS_CARDS }}
         run: python deep.py
 
       - name: Commit data
