@@ -1261,6 +1261,13 @@
       const t = new Date(d.generated_at);
       document.getElementById("updated").textContent =
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      // 수집은 하루 두 번(07·18시). 16시간 넘게 새 데이터가 없거나 AI 정리가 실패했으면 화면 위에 알립니다.
+      const hours = (Date.now() - t.getTime()) / 3600_000;
+      const notes = [];
+      if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(OpenAI 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
+      if (hours > 16) notes.push(`데이터가 ${Math.floor(hours)}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
+      const note = document.getElementById("status-note");
+      if (note && notes.length) { note.textContent = notes.join(" "); note.hidden = false; }
       route();
     })
     .catch(() => {

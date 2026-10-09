@@ -775,6 +775,14 @@ def main():
         log(f"! 심층 분석 실패: {e}")
 
     if ai_error:
+        # 뉴스·심층 분석에서 난 오류도 index.json에 남긴다(화면 상단 안내와 포털 상태가 읽음)
+        try:
+            idx = read_json(INDEX_PATH, {})
+            if idx and not idx.get("ai_error"):
+                idx["ai_error"] = ai_error
+                write_json(INDEX_PATH, idx)
+        except Exception as e:  # noqa: BLE001
+            log(f"! index.json에 AI 오류 기록 실패: {e}")
         # 데이터는 저장했지만, Actions에서 실패로 표시해 메일 알림이 가게 한다
         log(f"::error::{ai_error}")
         sys.exit(1)

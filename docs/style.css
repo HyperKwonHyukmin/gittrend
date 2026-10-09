@@ -208,6 +208,8 @@ button { font: inherit; color: inherit; }
 
 .empty { text-align: center; color: var(--ink-3); padding: 60px 0; }
 .loading { color: var(--ink-3); padding: 60px 0; text-align: center; }
+.status-note { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 14px; line-height: 1.5; }
+.status-note[hidden] { display: none; }
 
 /* ---------- 상세 */
 .detail { padding: 18px 0 40px; max-width: 860px; margin: 0 auto; }

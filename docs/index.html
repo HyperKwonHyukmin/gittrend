@@ -13,9 +13,10 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="apple-mobile-web-app-title" content="GitTrend">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <!-- 글꼴은 화면 그리기를 막지 않게 받습니다(외부 CDN이 막힌 곳에서도 시스템 글꼴로 바로 보임). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'">
   <!-- style.css·app.js를 고치면 ?v= 값을 올립니다. 브라우저가 예전 파일(최대 10분 캐시)을 새 화면과 섞어 쓰지 않게 하기 위함입니다. -->
-  <link rel="stylesheet" href="style.css?v=20261009b">
+  <link rel="stylesheet" href="style.css?v=20261009c">
 </head>
 <body>
   <header class="top">
@@ -40,6 +41,9 @@
     </div>
   </header>
 
+  <!-- AI 정리가 실패했거나 데이터가 오래됐을 때만 보이는 안내(app.js) -->
+  <p id="status-note" class="status-note wrap" role="status" hidden></p>
+
   <main id="app" class="wrap">
     <p class="loading">불러오는 중…</p>
   </main>
@@ -55,6 +59,6 @@
     <span id="sources">출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록</span>
   </footer>
 
-  <script src="app.js?v=20261009b"></script>
+  <script src="app.js?v=20261009c"></script>
 </body>
 </html>
