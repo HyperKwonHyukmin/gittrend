@@ -86,6 +86,16 @@ class NewsTests(unittest.TestCase):
         third.assert_not_called()
         self.assertNotIn("card", files[news.NEWS_PATH]["articles"][0])
 
+    def test_card_fit_level_is_normalized(self):
+        a = {"title": "t", "source": "s", "kind": "새 모델", "snippet": ""}
+        reply = {"what": "무엇", "fit": "맞음", "fit_level": "높음", "try": {"desc": "", "code": ""}}
+        with patch.object(collect, "chat_json", return_value=reply):
+            card = news.ai_card(a, "본문", "")
+        self.assertEqual(card["fit_level"], "높음")
+        self.assertNotIn("try", card)
+        with patch.object(collect, "chat_json", return_value={**reply, "fit_level": "매우 높음"}):
+            self.assertEqual(news.ai_card(a, "", "")["fit_level"], "")
+
     def test_old_format_news_is_replaced(self):
         old = {"id": "old1", "title": "투자 소식", "link": "https://example.test/o", "source": "x",
                "published": dt.datetime.now(collect.KST).isoformat(timespec="minutes"),

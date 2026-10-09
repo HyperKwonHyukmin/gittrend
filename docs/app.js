@@ -770,10 +770,17 @@
   const NEWS_PAGE = 50;
   const KIND_ICON = { "새 모델": "🆕", "도구·라이브러리": "📦", "사용법·팁": "💡", "업계 흐름": "📈" };
   let news = null;
-  const newsState = { kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
+  // home: 구역별로 추린 AI 홈 화면 / false면 kind로 거른 전체 목록
+  const newsState = { home: true, kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
   const readNews = new Set(store.get("gittrend:read", []));
+  let newsScroll = 0;
 
   const newsTitle = a => a.title_ko || a.title;
+  const DAY = 86400000;
+  const FIT_RANK = { "높음": 2, "보통": 1, "": 1, "낮음": 0 };
+  // 라이브러리 목록에서 AI 관련 저장소 골라내기 (분류·태그·토픽·설명). 하이픈은 단어 경계로 보지 않는다 (photoshop-ai 같은 토픽 제외)
+  const AI_REPO = /(^|[^a-z-])(ai|llm|llms|gpt|agent|agents|agentic|mcp|rag|claude|codex|openai|anthropic|gemini|copilot|inference|embedding|prompt|diffusion|transformer|voice-ai|tts|stt)([^a-z-]|$)|에이전트|인공지능|언어 ?모델/i;
+  const isAiRepo = r => !!r && AI_REPO.test([r.category, ...(r.tags || []), ...(r.topics || []), r.description, r.one_liner].join(" "));
 
   function timeText(iso) {
     const t = new Date(iso);
@@ -832,7 +839,7 @@
       </div>`;
   }
 
-  function newsItemHtml(a) {
+  function newsItemHtml(a, { showFit = false } = {}) {
     const imp = a.importance || 0;
     const link = esc(safeUrl(a.link));
     const retitled = a.title_ko && a.title_ko !== a.title;
@@ -840,6 +847,7 @@
       <div class="news-meta">
         ${imp >= 4 ? '<span class="badge-hot">주요</span>' : ""}
         ${a.kind ? `<span class="chip cat">${KIND_ICON[a.kind] || ""} ${esc(a.kind)}</span>` : ""}
+        ${a.card?.fit_level === "높음" ? '<span class="fit-chip">내 작업에 딱</span>' : ""}
         <span class="news-src">${esc(a.source)}</span>
         <span>${timeText(a.published)}</span>
         ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
@@ -847,7 +855,8 @@
     const titles = `
       <h3>${esc(newsTitle(a))}</h3>
       ${retitled ? `<p class="news-orig">${esc(a.title)}</p>` : ""}
-      ${a.summary ? `<p class="news-sum">${esc(a.summary)}</p>` : !a.ai && a.snippet ? `<p class="news-sum">${esc(a.snippet)}</p>` : ""}`;
+      ${a.summary ? `<p class="news-sum">${esc(a.summary)}</p>` : !a.ai && a.snippet ? `<p class="news-sum">${esc(a.snippet)}</p>` : ""}
+      ${showFit && a.card?.fit ? `<p class="fy-fit">${esc(a.card.fit)}</p>` : ""}`;
     const foot = `
       <p class="news-extra">
         <a href="${link}" target="_blank" rel="noopener" data-read="${esc(a.id)}">원문 ↗</a>
@@ -882,14 +891,100 @@
         <div class="digest-k">오늘의 AI 레이더 · AI 요약</div>
         <h2>${esc(b.headline)}</h2>
         ${b.summary ? `<p>${esc(b.summary)}</p>` : ""}
-        ${(b.themes || []).length ? `<div class="themes">${b.themes.map(t => `
+        ${(b.themes || []).length ? `
+        <details class="brief-themes" ${matchMedia("(min-width: 641px)").matches ? "open" : ""}>
+          <summary>오늘의 흐름 ${b.themes.length}개</summary>
+          <div class="themes">${b.themes.map(t => `
           <div class="theme">
             <b>${esc(t.title)}</b>
             ${t.desc ? `<span>${esc(t.desc)}</span>` : ""}
             <div class="theme-repos">${(t.ids || []).map(i => byId[i]).filter(Boolean)
               .map(a => `<a href="#n-${esc(a.id)}" data-jump="${esc(a.id)}">${esc(short(a))}</a>`).join("")}</div>
-          </div>`).join("")}</div>` : ""}
+          </div>`).join("")}</div>
+        </details>` : ""}
       </section>`;
+  }
+
+  // ---- AI 홈: 구역마다 몇 개씩만 추려서 한 화면에 보여준다. 한 항목은 한 구역에만 나온다.
+
+  // 최근 days일 안에서 중요도 높은 순으로 n개. 모자라면 기간을 넘겨 채운다.
+  function pickTop(rows, n, used, days = 7) {
+    const cut = Date.now() - days * DAY;
+    const left = rows.filter(a => !used.has(a.id));
+    const fresh = left.filter(a => new Date(a.published) >= cut);
+    const pool = fresh.length >= n ? fresh : left;
+    const out = [...pool].sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.published.localeCompare(a.published)).slice(0, n);
+    out.forEach(a => used.add(a.id));
+    return out;
+  }
+
+  // 나를 위한 추천: 카드가 있고 profile.md 기준 적합도가 높은 것, 아직 안 읽은 것
+  function forYou(all, n, used) {
+    const cut = Date.now() - 7 * DAY;
+    const out = all.filter(a => a.card && a.card.fit_level !== "낮음" && !readNews.has(a.id) && new Date(a.published) >= cut)
+      .sort((a, b) => FIT_RANK[b.card.fit_level || ""] - FIT_RANK[a.card.fit_level || ""]
+        || (b.importance || 0) - (a.importance || 0) || b.published.localeCompare(a.published))
+      .slice(0, n);
+    out.forEach(a => used.add(a.id));
+    return out;
+  }
+
+  // 내 도구 업데이트: 도구마다 가장 최근 릴리스 하나 (articles는 최신순)
+  function toolUpdates(all, n, used) {
+    const latest = new Map();
+    for (const a of all) if (a.repo && !used.has(a.id) && !latest.has(a.repo)) latest.set(a.repo, a);
+    const out = [...latest.values()].slice(0, n);
+    out.forEach(a => used.add(a.id));
+    return out;
+  }
+
+  function libMiniHtml(r) {
+    const p = r.period || {};
+    const grow = p.daily ? `+${fmt(p.daily)}★ 오늘` : p.weekly ? `+${fmt(p.weekly)}★ 이번 주` : r.growth?.d1 ? `+${fmt(r.growth.d1)}★ 하루` : `★ ${fmt(r.stars)}`;
+    return `
+      <a class="lib-mini" href="#/r/${encodeURIComponent(r.slug)}">
+        <div class="lm-top"><b>${esc(r.full_name)}</b><span class="lm-grow">${grow}</span></div>
+        <p>${esc(r.one_liner || r.description || "")}</p>
+        <div class="lm-meta">
+          ${r.is_new ? '<span class="new">NEW</span>' : ""}
+          ${r.category ? `<span>${esc(r.category)}</span>` : ""}
+          ${r.language ? `<span>${esc(r.language)}</span>` : ""}
+          ${r.has_deep ? '<span class="lm-deep">심층 분석</span>' : ""}
+        </div>
+      </a>`;
+  }
+
+  function homeSec(title, sub, inner, more) {
+    if (!inner) return "";
+    return `
+      <section class="home-sec">
+        <div class="home-head">
+          <h2>${title}</h2>
+          ${more ? `<a class="home-more" href="${esc(more.href || "#/news")}" ${more.kind != null ? `data-goto="${esc(more.kind)}"` : ""}>${esc(more.label || "더 보기")} →</a>` : ""}
+        </div>
+        ${sub ? `<p class="home-sub">${sub}</p>` : ""}
+        ${inner}
+      </section>`;
+  }
+
+  function homeHtml(all) {
+    const used = new Set();
+    const list = (rows, opts) => rows.length ? `<div class="news-list">${rows.map(a => newsItemHtml(a, opts)).join("")}</div>` : "";
+    const mine = forYou(all, 3, used);
+    const libs = data ? listKeys("hot").map(k => data.repos[k]).filter(isAiRepo).slice(0, 6) : [];
+    const of = kind => all.filter(a => a.kind === kind);
+    const models = pickTop(of("새 모델"), 4, used);
+    const usage = pickTop(of("사용법·팁"), 5, used);
+    const tools = toolUpdates(all, 6, used);
+    const trends = pickTop(of("업계 흐름"), 3, used);
+    return `
+      ${homeSec("⭐ 나를 위한 추천", "profile.md에 적어 둔 작업 기준으로 지금 쓸 만한 것 (읽으면 다음 것으로 바뀌어요)", list(mine, { showFit: true }))}
+      ${homeSec("🔥 요즘 뜨는 AI 라이브러리", "GitHub Trending · HN · star 급상승에서 AI 관련만 골랐어요",
+        libs.length ? `<div class="lib-grid">${libs.map(libMiniHtml).join("")}</div>` : "", { label: "라이브러리 전체", href: "#/t/hot" })}
+      ${homeSec("🆕 새 모델", "", list(models), { kind: "새 모델" })}
+      ${homeSec("💡 사람들은 이렇게 써요", "Reddit · Hacker News · GeekNews · 블로그의 실제 사용기와 팁", list(usage), { kind: "사용법·팁" })}
+      ${homeSec("📦 내 도구 업데이트", "Claude Code, Codex, Vite, Playwright 등 쓰는 도구의 새 버전", list(tools), { kind: "도구·라이브러리" })}
+      ${homeSec("📈 업계 흐름", "", list(trends), { kind: "업계 흐름" })}`;
   }
 
   function markRead(id, el) {
@@ -927,14 +1022,15 @@
       body = groups.map(g => `<h2 class="day">${esc(g.label)}</h2><div class="news-list">${g.items.map(newsItemHtml).join("")}</div>`).join("");
     }
 
-    $app.innerHTML = `
-      <p class="tab-desc news-desc">새 모델, 새 도구·라이브러리, 바로 써먹을 수 있는 사용법을 공식 발표·릴리스·개발자 커뮤니티에서 모았어요.
-        주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.</p>
-      ${briefHtml()}
+    // 검색 중에는 홈 대신 전체 목록에서 찾는다
+    const showHome = newsState.home && !state.q.trim() && all.length > 0;
+    const chips = `
       <div class="topic-chips">
-        <button type="button" class="tchip" data-kind="" aria-pressed="${!newsState.kind}">전체 <span>${all.length}</span></button>
-        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
-      </div>
+        <button type="button" class="tchip" data-view="home" aria-pressed="${showHome}">🏠 홈</button>
+        <button type="button" class="tchip" data-kind="" aria-pressed="${!showHome && !newsState.kind}">전체 <span>${all.length}</span></button>
+        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${!showHome && newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
+      </div>`;
+    const feed = `
       <div class="filters">
         <select id="nsort" aria-label="정렬">
           <option value="latest" ${newsState.sort === "latest" ? "selected" : ""}>최신순</option>
@@ -944,14 +1040,28 @@
         <span class="count">${rows.length}건</span>
       </div>
       ${body}
-      ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}
+      ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}`;
+
+    $app.innerHTML = `
+      <p class="tab-desc news-desc">나를 위한 AI 홈이에요. 새 모델, 뜨는 AI 라이브러리, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에 모았어요.
+        주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.</p>
+      ${showHome ? briefHtml() + chips + homeHtml(all) : chips + feed}
       <p class="news-foot">
         ${news.ai_enabled ? "" : "AI 정리가 꺼져 있어 원문 제목만 보여요. "}
         AI 정리는 틀릴 수 있으니, 중요한 내용은 원문을 확인해 주세요.
       </p>`;
 
     const rerender = () => { newsState.shown = NEWS_PAGE; renderNews(); };
-    $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => { newsState.kind = b.dataset.kind; rerender(); }));
+    const showFeed = kind => {
+      Object.assign(newsState, { home: false, kind });
+      rerender();
+      window.scrollTo(0, 0);
+    };
+    $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.view === "home") { newsState.home = true; rerender(); }
+      else showFeed(b.dataset.kind);
+    }));
+    $app.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); showFeed(a.dataset.goto); }));
     $app.querySelector("#nsort")?.addEventListener("change", e => { newsState.sort = e.target.value; rerender(); });
     $app.querySelector("#important")?.addEventListener("click", () => { newsState.important = !newsState.important; rerender(); });
     $app.querySelector("#more")?.addEventListener("click", () => {
@@ -969,7 +1079,8 @@
       e.preventDefault();
       const id = a.dataset.jump;
       if (!document.getElementById("n-" + id)) {
-        // 아직 펼치지 않은 뒤쪽 항목이면 거기까지 펼친다
+        // 홈에 없거나 아직 펼치지 않은 뒤쪽 항목이면 전체 목록에서 거기까지 펼친다
+        Object.assign(newsState, { home: false, kind: "", important: false });
         const idx = filteredNews().findIndex(x => x.id === id);
         if (idx < 0) return;
         newsState.shown = Math.ceil((idx + 1) / NEWS_PAGE) * NEWS_PAGE;
@@ -986,43 +1097,58 @@
   }
 
   // ------------------------------------------------------------ 라우팅
-  //   #/            처음 화면 (마지막에 본 탭)
+  //   #/            처음 화면 = AI 홈
   //   #/t/<탭>      라이브러리 목록
   //   #/r/<저장소>  라이브러리 상세
-  //   #/news        AI 레이더 (새 모델 · 도구 · 사용법)
+  //   #/news        AI 홈 (추천 · 뜨는 AI 라이브러리 · 새 모델 · 활용법 · 도구 업데이트)
   //   #/import/...  관심 목록 가져오기
 
   let listScroll = 0;
   let cameFromList = false;
   let onList = false;
   let lastListTab = null;
+  let onNews = false;
+  let backToNews = false;
 
   function setSection(name) {
     document.querySelectorAll(".sec").forEach(a => a.setAttribute("aria-current", a.dataset.sec === name ? "page" : "false"));
     $q.placeholder = name === "news" ? "모델, 도구, 내용으로 찾기" : "이름, 설명, 태그로 찾기";
     document.getElementById("sources").textContent = name === "news"
-      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News"
+      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · GitTrend 라이브러리"
       : "출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록";
   }
 
   function route() {
     const h = location.hash;
     let m;
+    if (!h || h === "#" || h === "#/") {
+      history.replaceState(null, "", "#/news");
+      route();
+      return;
+    }
     if (h.startsWith("#/news")) {
       setSection("news");
       onList = false;
       cameFromList = false;
-      renderNews();
-      window.scrollTo(0, 0);
+      const back = backToNews;
+      backToNews = false;
+      onNews = true;
+      // 홈에서 라이브러리를 보고 돌아오면 보던 자리로
+      renderNews().then(() => window.scrollTo(0, back ? newsScroll : 0));
+      if (!back) window.scrollTo(0, 0);
       return;
     }
     setSection("lib");
     if ((m = h.match(/^#\/r\/(.+)$/))) {
-      cameFromList = onList;
+      cameFromList = onList || onNews;
+      backToNews = onNews;
       onList = false;
+      onNews = false;
       renderDetail(decodeURIComponent(m[1]));
       return;
     }
+    onNews = false;
+    backToNews = false;
     if ((m = h.match(/^#\/import\/(.*)$/))) {
       importSaved(m[1]);
       return;
@@ -1050,6 +1176,7 @@
   window.addEventListener("hashchange", route);
   document.addEventListener("click", e => {
     if (e.target.closest(".card-link") || e.target.closest(".theme-repos a")) listScroll = window.scrollY;
+    if (e.target.closest(".lib-mini")) newsScroll = window.scrollY;
   });
 
   let qTimer;
