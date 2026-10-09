@@ -91,6 +91,16 @@ button { font: inherit; color: inherit; }
 }
 .search:focus-within { border-color: var(--accent); }
 
+/* IdeaBox로 아이디어 보내기 */
+.idea-btn {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  color: var(--ink-2); font-weight: 600; font-size: 14px; text-decoration: none;
+  transition: border-color .15s, color .15s;
+}
+.idea-btn:hover, .idea-btn:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
+.idea-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
 /* ---------- 탭 */
 .tabs {
   display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
@@ -525,6 +535,9 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
 
 /* ---------- 모바일 */
 @media (max-width: 640px) {
+  .idea-btn { width: 36px; height: 36px; padding: 0; justify-content: center; order: 1; }
+  .search { order: 2; }
+  .idea-btn span { display: none; }
   body { font-size: 15px; }
   .wrap { padding: 0 16px; }
   .top-inner { padding: 10px 16px; gap: 10px; flex-wrap: wrap; }

@@ -1266,4 +1266,21 @@
     .catch(() => {
       $app.innerHTML = `<p class="empty">데이터를 불러오지 못했어요. 수집기(collect.py)를 먼저 실행해 주세요.</p>`;
     });
+
+  // ---------- IdeaBox로 아이디어 보내기
+  // 누르는 순간의 화면(주소·제목)을 담아 IdeaBox 빠른 입력 창을 엽니다. 저장은 IdeaBox 창에서 버튼을 눌러야 됩니다.
+  const ideaBtn = document.getElementById("idea-btn");
+  if (ideaBtn) {
+    const ideaUrl = () => {
+      const heading = document.querySelector("#app h1, #app h2")?.textContent?.trim();
+      const title = heading ? `${heading} · GitTrend` : document.title;
+      return `https://idea.hyperkwon.com/new?src=GitTrend&url=${encodeURIComponent(location.href)}&title=${encodeURIComponent(title)}`;
+    };
+    // 가운데 클릭·새 탭으로 열기에도 지금 화면 주소가 담기도록 가리킬 때마다 갱신
+    ["pointerenter", "focus", "touchstart"].forEach((ev) => ideaBtn.addEventListener(ev, () => { ideaBtn.href = ideaUrl(); }, { passive: true }));
+    ideaBtn.addEventListener("click", (e) => {
+      const w = window.open(ideaUrl(), "ideabox", "width=520,height=680");
+      if (w) e.preventDefault(); // 팝업이 막히면 링크(새 탭)로 그대로 엽니다
+    });
+  }
 })();
