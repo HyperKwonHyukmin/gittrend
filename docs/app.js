@@ -771,8 +771,35 @@
   const KIND_ICON = { "새 모델": "🆕", "도구·라이브러리": "📦", "사용법·팁": "💡", "업계 흐름": "📈" };
   let news = null;
   // home: 구역별로 추린 AI 홈 화면 / false면 kind로 거른 전체 목록
-  const newsState = { home: true, kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
+  // saved: 즐겨찾기한 기사만 보기
+  const newsState = { home: true, saved: false, kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
   const readNews = new Set(store.get("gittrend:read", []));
+  // 즐겨찾기한 기사: id -> 저장 당시의 기사 전체 (30일이 지나 목록에서 빠져도 카드까지 그대로 볼 수 있게)
+  let savedNews = store.get("gittrend:newsSaved", {});
+  if (!savedNews || typeof savedNews !== "object") savedNews = {};
+  const isNewsSaved = id => Object.prototype.hasOwnProperty.call(savedNews, id);
+
+  function toggleNewsSave(id) {
+    if (isNewsSaved(id)) {
+      delete savedNews[id];
+      toast("즐겨찾기에서 뺐어요");
+    } else {
+      const a = (news.articles || []).find(x => x.id === id);
+      if (!a) return false;
+      savedNews[id] = { ...a, saved_at: Date.now() };
+      toast("★ 즐겨찾기에 저장했어요");
+    }
+    store.set("gittrend:newsSaved", savedNews);
+    return isNewsSaved(id);
+  }
+
+  // 즐겨찾기 목록: 아직 목록에 있는 기사는 최신 내용(새로 만든 카드 등)을 쓰고, 빠진 기사는 저장본을 쓴다
+  function savedNewsRows() {
+    const live = Object.fromEntries((news.articles || []).map(a => [a.id, a]));
+    return Object.values(savedNews)
+      .map(s => ({ ...s, ...(live[s.id] || {}), saved_at: s.saved_at }))
+      .sort((a, b) => (b.saved_at || 0) - (a.saved_at || 0));
+  }
   let newsScroll = 0;
 
   const newsTitle = a => a.title_ko || a.title;
@@ -800,7 +827,7 @@
 
   function filteredNews() {
     const q = state.q.trim().toLowerCase();
-    let rows = (news.articles || []).filter(a => {
+    let rows = (newsState.saved ? savedNewsRows() : news.articles || []).filter(a => {
       if (newsState.kind && a.kind !== newsState.kind) return false;
       if (newsState.important && !(a.importance >= 4)) return false;
       if (!q) return true;
@@ -808,7 +835,7 @@
       return [a.title, a.title_ko, a.summary, a.snippet, a.source, a.kind, c.what, c.why, ...(c.points || [])]
         .join(" ").toLowerCase().includes(q);
     });
-    if (newsState.sort === "important") {
+    if (newsState.sort === "important" && !newsState.saved) {  // 즐겨찾기는 저장한 순서 그대로
       rows = [...rows].sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.published.localeCompare(a.published));
     }
     return rows;
@@ -851,6 +878,8 @@
         <span class="news-src">${esc(a.source)}</span>
         <span>${timeText(a.published)}</span>
         ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
+        <button class="nsave" type="button" data-nsave="${esc(a.id)}" aria-pressed="${isNewsSaved(a.id)}"
+          title="${isNewsSaved(a.id) ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장"}">${isNewsSaved(a.id) ? "★" : "☆"}</button>
       </div>`;
     const titles = `
       <h3>${esc(newsTitle(a))}</h3>
@@ -1008,8 +1037,10 @@
 
     let body;
     if (!rows.length) {
-      body = `<p class="empty">${all.length ? "조건에 맞는 소식이 없어요." : "아직 모은 소식이 없어요. 수집기(collect.py)를 실행해 주세요."}</p>`;
-    } else if (newsState.sort === "important") {
+      body = `<p class="empty">${newsState.saved
+        ? (Object.keys(savedNews).length ? "조건에 맞는 즐겨찾기가 없어요." : "아직 즐겨찾기한 기사가 없어요. 기사 오른쪽 위의 ☆를 누르면 여기에 모여요.")
+        : all.length ? "조건에 맞는 소식이 없어요." : "아직 모은 소식이 없어요. 수집기(collect.py)를 실행해 주세요."}</p>`;
+    } else if (newsState.saved || newsState.sort === "important") {
       body = `<div class="news-list">${page.map(newsItemHtml).join("")}</div>`;
     } else {
       // 최신순일 때는 날짜별로 묶는다
@@ -1027,10 +1058,14 @@
     const chips = `
       <div class="topic-chips">
         <button type="button" class="tchip" data-view="home" aria-pressed="${showHome}">🏠 홈</button>
-        <button type="button" class="tchip" data-kind="" aria-pressed="${!showHome && !newsState.kind}">전체 <span>${all.length}</span></button>
-        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${!showHome && newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
+        <button type="button" class="tchip" data-view="saved" aria-pressed="${!showHome && newsState.saved}">★ 즐겨찾기 <span class="nsaved-n">${Object.keys(savedNews).length}</span></button>
+        <button type="button" class="tchip" data-kind="" aria-pressed="${!showHome && !newsState.saved && !newsState.kind}">전체 <span>${all.length}</span></button>
+        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${!showHome && !newsState.saved && newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
       </div>`;
-    const feed = `
+    const feed = newsState.saved ? `
+      <p class="tab-desc">☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. 이 기기 브라우저에만 저장돼요.</p>
+      ${body}
+      ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}` : `
       <div class="filters">
         <select id="nsort" aria-label="정렬">
           <option value="latest" ${newsState.sort === "latest" ? "selected" : ""}>최신순</option>
@@ -1052,14 +1087,33 @@
       </p>`;
 
     const rerender = () => { newsState.shown = NEWS_PAGE; renderNews(); };
-    const showFeed = kind => {
-      Object.assign(newsState, { home: false, kind });
+    const showFeed = (kind, saved = false) => {
+      Object.assign(newsState, { home: false, saved, kind });
       rerender();
       window.scrollTo(0, 0);
     };
     $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => {
-      if (b.dataset.view === "home") { newsState.home = true; rerender(); }
+      if (b.dataset.view === "home") { Object.assign(newsState, { home: true, saved: false }); rerender(); }
+      else if (b.dataset.view === "saved") showFeed("", true);
       else showFeed(b.dataset.kind);
+    }));
+    $app.querySelectorAll("[data-nsave]").forEach(b => b.addEventListener("click", e => {
+      e.preventDefault();   // 카드 제목 영역(summary) 안에 있어서, 누를 때 카드가 펼쳐지지 않게
+      e.stopPropagation();
+      const id = b.dataset.nsave;
+      const on = toggleNewsSave(id);
+      if (newsState.saved) {  // 즐겨찾기 화면에서 빼면 바로 목록에서 없앤다
+        const y = window.scrollY;
+        renderNews().then(() => window.scrollTo(0, y));
+        return;
+      }
+      $app.querySelectorAll(`[data-nsave="${CSS.escape(id)}"]`).forEach(x => {
+        x.setAttribute("aria-pressed", on);
+        x.textContent = on ? "★" : "☆";
+        x.title = on ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장";
+      });
+      const n = $app.querySelector(".nsaved-n");
+      if (n) n.textContent = Object.keys(savedNews).length;
     }));
     $app.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); showFeed(a.dataset.goto); }));
     $app.querySelector("#nsort")?.addEventListener("change", e => { newsState.sort = e.target.value; rerender(); });
@@ -1080,7 +1134,7 @@
       const id = a.dataset.jump;
       if (!document.getElementById("n-" + id)) {
         // 홈에 없거나 아직 펼치지 않은 뒤쪽 항목이면 전체 목록에서 거기까지 펼친다
-        Object.assign(newsState, { home: false, kind: "", important: false });
+        Object.assign(newsState, { home: false, saved: false, kind: "", important: false });
         const idx = filteredNews().findIndex(x => x.id === id);
         if (idx < 0) return;
         newsState.shown = Math.ceil((idx + 1) / NEWS_PAGE) * NEWS_PAGE;

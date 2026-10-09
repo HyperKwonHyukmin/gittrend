@@ -428,6 +428,15 @@ details.radar[open] .rc-toggle::after { content: " ▴"; }
   margin: 8px 0 0; padding: 8px 11px; border-radius: 10px; font-size: 14px;
   background: var(--accent-soft); color: var(--ink-2);
 }
+/* 즐겨찾기 별: 항목 오른쪽 위에 고정해서 메타 줄이 길어도 줄바꿈되지 않게 */
+.news-item { position: relative; }
+.news-item .news-meta { padding-right: 34px; }
+.nsave {
+  position: absolute; top: 10px; right: 10px; cursor: pointer; font: inherit; font-size: 19px; line-height: 1;
+  color: var(--ink-3); background: none; border: 0; border-radius: 8px; padding: 4px 6px;
+}
+.nsave:hover { background: var(--surface-2); color: var(--accent); }
+.nsave[aria-pressed="true"] { color: var(--accent); }
 .fit-chip { font-size: 11px; font-weight: 800; color: #fff; background: var(--good); padding: 1px 6px; border-radius: 5px; }
 .lib-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
 .lib-mini {
