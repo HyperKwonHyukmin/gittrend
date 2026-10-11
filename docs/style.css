@@ -538,6 +538,7 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
 /* ---------- 모바일 */
 @media (max-width: 640px) {
   .idea-btn { width: 36px; height: 36px; padding: 0; justify-content: center; order: 1; }
+  .ws-btn { margin-left: auto; }
   .search { order: 2; }
   .idea-btn span { display: none; }
   body { font-size: 15px; }
