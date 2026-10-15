@@ -1,18 +1,20 @@
 (() => {
   "use strict";
 
+  // 탭 하나에 기간이 여러 개면 views에 목록 id를 두고, 탭 아래 기간 선택으로 고른다.
+  // 주소는 예전처럼 목록 id(#/t/daily, #/t/new7 …)를 그대로 써서 예전 링크도 열린다.
   const TABS = [
     { id: "hot", label: "종합 주목", desc: "아래 목록을 모두 합쳐서, 여러 곳에서 동시에 뜨는 저장소일수록 위로 올렸어요." },
     { id: "saved", label: "★ 관심", desc: "☆를 눌러 저장한 라이브러리와, 그와 비슷한 라이브러리 추천이에요. 이 기기에만 저장돼요." },
-    { id: "daily", label: "오늘", desc: "GitHub Trending 기준, 오늘 하루 star를 많이 받은 저장소예요." },
-    { id: "weekly", label: "이번 주", desc: "GitHub Trending 기준, 이번 주에 star를 많이 받은 저장소예요." },
-    { id: "monthly", label: "이번 달", desc: "GitHub Trending 기준, 이번 달에 star를 많이 받은 저장소예요." },
-    { id: "new7", label: "새로 뜬 (7일)", desc: "최근 7일 안에 만들어졌는데 벌써 star가 많이 쌓인 저장소예요." },
-    { id: "new30", label: "새로 뜬 (30일)", desc: "최근 30일 안에 만들어진 저장소 중 star가 많은 순서예요." },
+    { id: "trend", label: "트렌딩", views: ["daily", "weekly", "monthly"], desc: "GitHub Trending 기준, 고른 기간(오늘·이번 주·이번 달) 동안 star를 많이 받은 저장소예요." },
+    { id: "new", label: "새로 뜬", views: ["new7", "new30"], desc: "고른 기간(7일·30일) 안에 만들어졌는데 벌써 star가 많이 쌓인 저장소예요." },
     { id: "hn", label: "HN 화제", desc: "개발자 커뮤니티 Hacker News에서 이번 주 추천과 댓글을 많이 받은 GitHub 저장소예요." },
     { id: "rising", label: "급상승", desc: "매일 star 수를 기록해서, 어제보다 star가 가장 많이 늘어난 저장소예요. 기록이 이틀 이상 쌓이면 나타나요." },
   ];
-  const TAB_IDS = new Set(TABS.map(t => t.id));
+  const VIEW_LABEL = { daily: "오늘", weekly: "이번 주", monthly: "이번 달", new7: "7일", new30: "30일" };
+  // 목록 id → 탭 (기간이 없는 탭은 목록 id가 곧 탭 id)
+  const tabOf = view => TABS.find(t => t.id === view || (t.views || []).includes(view));
+  const TAB_IDS = new Set(TABS.flatMap(t => t.views || [t.id]));
   const SRC_LABEL = { daily: "오늘", weekly: "이번 주", monthly: "이번 달", new7: "신규 7일", new30: "신규 30일", hn: "HN", rising: "급상승" };
   const LANG_COLORS = {
     TypeScript: "#3178c6", JavaScript: "#f1e05a", Python: "#3572A5", Go: "#00ADD8", Rust: "#dea584",
@@ -31,7 +33,9 @@
   const $app = document.getElementById("app");
   const $q = document.getElementById("q");
   let data = null;       // index.json: 오늘의 목록
-  let catalog = {};      // catalog.json: 지금까지 본 모든 저장소
+  let catalog = {};      // catalog.json: 지금까지 본 모든 저장소 (관심 탭·상세·가져오기에서 처음 쓸 때 불러옴)
+  let catalogLoad = null; // 불러오는 중이거나 끝난 Promise
+  let catalogReady = false;
   let spark = null;      // spark.json: star 변화 (상세 화면에서 처음 쓸 때 불러옴)
   const detailCache = {};
   const state = { tab: "hot", lang: "", cat: "", sort: "rank", onlyNew: false, q: "" };
@@ -48,7 +52,25 @@
   };
   let saved = store.get("gittrend:saved", {});
   if (!saved || typeof saved !== "object") saved = {};
-  const prefTab = store.get("gittrend:view", {}).tab;
+  const prefView = store.get("gittrend:view", {}) || {};
+  const prefTab = prefView.tab;
+  // 기간 탭마다 마지막으로 고른 기간 (트렌딩 → weekly 등)
+  const lastView = (prefView.periods && typeof prefView.periods === "object") ? { ...prefView.periods } : {};
+  if (tabOf(prefTab)?.views) lastView[tabOf(prefTab).id] = prefTab;
+  const viewOfTab = t => (t.views ? (t.views.includes(lastView[t.id]) ? lastView[t.id] : t.views[0]) : t.id);
+
+  // 처음 보는 사람을 위한 설명 문단: '닫기'를 누르면 이 기기에서는 다시 보이지 않는다
+  const hiddenDesc = new Set(store.get("gittrend:hideDesc", []));
+  const descHtml = (key, text, cls = "") => hiddenDesc.has(key) ? "" : `
+      <p class="tab-desc ${cls}" data-desc="${esc(key)}">${text}
+        <button type="button" class="desc-close" data-desc-close="${esc(key)}" aria-label="이 설명 닫기" title="이 설명 닫기">닫기</button></p>`;
+  function bindDesc(root) {
+    root.querySelectorAll("[data-desc-close]").forEach(b => b.addEventListener("click", () => {
+      hiddenDesc.add(b.dataset.descClose);
+      store.set("gittrend:hideDesc", [...hiddenDesc]);
+      b.closest("[data-desc]")?.remove();
+    }));
+  }
 
   // ------------------------------------------------------------ 도우미
 
@@ -125,12 +147,14 @@
     if (tabCount) tabCount.textContent = Object.keys(saved).length;
   }
 
+  const saveLabel = (key, on) => `${(repoOf(key)?.full_name || key).split("/")[1] || key} ${on ? "즐겨찾기 해제" : "즐겨찾기 추가"}`;
+
   function paintSave(btn, key) {
     const on = isSaved(key);
     btn.setAttribute("aria-pressed", on);
     btn.title = on ? "관심 목록에서 빼기" : "관심 목록에 저장";
     if (btn.classList.contains("btn")) btn.innerHTML = on ? "★ 저장됨" : "☆ 관심 저장";
-    else btn.textContent = on ? "★" : "☆";
+    else { btn.textContent = on ? "★" : "☆"; btn.setAttribute("aria-label", saveLabel(key, on)); }
   }
 
   // ------------------------------------------------------------ 비슷한 라이브러리 찾기
@@ -284,6 +308,7 @@
             ${srcs}
           </div>
           <button class="save" type="button" data-save="${esc(key)}" aria-pressed="${isSaved(key)}"
+            aria-label="${esc(saveLabel(key, isSaved(key)))}"
             title="${isSaved(key) ? "관심 목록에서 빼기" : "관심 목록에 저장"}">${isSaved(key) ? "★" : "☆"}</button>
         </div>
       </article>`;
@@ -352,15 +377,45 @@
       </section>`;
   }
 
+  // 다른 기기로 옮기기: 관심 라이브러리 + 즐겨찾기한 AI 소식(id만. 받는 쪽 news.json에 아직 남아 있는 소식만 옮겨짐)
+  //   #/import/<라이브러리,…>&n=<소식 id,…>   (&n= 부분이 없는 예전 링크도 그대로 열림)
+  function transferHtml() {
+    const repoKeys = Object.keys(saved);
+    const newsIds = Object.keys(savedNews).filter(id => /^[0-9a-f]{6,40}$/.test(id));
+    if (!repoKeys.length && !newsIds.length) return "";
+    const link = `${location.origin}${location.pathname}#/import/${encodeURIComponent(repoKeys.join(","))}` +
+      (newsIds.length ? `&n=${newsIds.join(",")}` : "");
+    const what = [repoKeys.length ? `관심 라이브러리 ${repoKeys.length}개` : "", newsIds.length ? `즐겨찾기한 AI 소식 ${newsIds.length}건` : ""]
+      .filter(Boolean).join("와 ");
+    return `
+      <section class="transfer">
+        <b>다른 기기로 옮기기</b>
+        <p>${what}은(는) 이 기기의 브라우저에만 저장돼요. 아래 링크를 폰이나 다른 PC에서 열면 같은 목록을 가져올 수 있어요.
+          ${newsIds.length ? "AI 소식은 최근 30일 목록에 아직 남아 있는 것만 옮겨져요." : ""}</p>
+        <div class="transfer-row">
+          <input type="text" readonly value="${esc(link)}" aria-label="관심 목록 옮기기 링크">
+          <button class="btn" type="button" id="copy-link">링크 복사</button>
+        </div>
+      </section>`;
+  }
+
+  function bindTransfer(root) {
+    root.querySelector("#copy-link")?.addEventListener("click", async e => {
+      const input = root.querySelector(".transfer input");
+      try { await navigator.clipboard.writeText(input.value); e.target.textContent = "복사됨"; }
+      catch (_) { input.select(); e.target.textContent = "직접 복사해 주세요"; }
+      setTimeout(() => { e.target.textContent = "링크 복사"; }, 1800);
+    });
+  }
+
   function savedExtrasHtml(savedKeys) {
     if (!savedKeys.length) {
       return `<div class="guide">
         <b>관심 라이브러리를 저장해 보세요</b>
         <p>카드 오른쪽 아래의 ☆를 누르면 여기에 모여요. 저장한 라이브러리와 분류, 태그, 설명이 비슷한 라이브러리를 찾아서 추천해 드려요.</p>
-      </div>`;
+      </div>${transferHtml()}`;
     }
     const recs = recommend(savedKeys, 12);
-    const link = `${location.origin}${location.pathname}#/import/${encodeURIComponent(savedKeys.join(","))}`;
     return `
       <section class="recs">
         <h2 class="sub-title">관심 목록과 비슷한 라이브러리</h2>
@@ -372,18 +427,11 @@
             })).join("")}</div>`
           : `<p class="empty small">아직 비슷한 라이브러리를 찾지 못했어요. 데이터가 쌓이면 추천이 늘어나요.</p>`}
       </section>
-      <section class="transfer">
-        <b>다른 기기로 옮기기</b>
-        <p>관심 목록은 이 기기의 브라우저에만 저장돼요. 아래 링크를 폰이나 다른 PC에서 열면 같은 목록을 가져올 수 있어요.</p>
-        <div class="transfer-row">
-          <input type="text" readonly value="${esc(link)}" aria-label="관심 목록 옮기기 링크">
-          <button class="btn" type="button" id="copy-link">링크 복사</button>
-        </div>
-      </section>`;
+      ${transferHtml()}`;
   }
 
   function renderList() {
-    const tab = TABS.find(t => t.id === state.tab);
+    const tab = tabOf(state.tab);
     const base = listKeys(state.tab);
     const langs = optionCounts(base, "language");
     const cats = optionCounts(base, "category");
@@ -394,6 +442,10 @@
     const rows = applyFilters(base);
     const showRank = state.tab !== "saved" && state.sort === "rank";
     const count = id => id === "saved" ? Object.keys(saved).length : listKeys(id).length;
+    const period = tab.views ? `
+      <div class="period" role="group" aria-label="기간">
+        ${tab.views.map(v => `<a class="pchip" href="#/t/${v}" aria-current="${v === state.tab ? "page" : "false"}">${VIEW_LABEL[v]}<span class="n">${count(v)}</span></a>`).join("")}
+      </div>` : "";
 
     let body;
     if (rows.length) {
@@ -408,12 +460,16 @@
 
     $app.innerHTML = `
       <nav class="tabs" role="tablist">
-        ${TABS.map(t => `
-          <a class="tab" role="tab" href="#/t/${t.id}" data-tab="${t.id}" aria-selected="${t.id === state.tab}">
-            ${t.label}<span class="n">${count(t.id)}</span>
-          </a>`).join("")}
+        ${TABS.map(t => {
+          const v = t === tab ? state.tab : viewOfTab(t);
+          return `
+          <a class="tab" role="tab" href="#/t/${v}" data-tab="${t.id}" aria-selected="${t === tab}">
+            ${t.label}<span class="n">${count(v)}</span>
+          </a>`;
+        }).join("")}
       </nav>
-      <p class="tab-desc">${tab.desc}</p>
+      ${period}
+      ${descHtml("tab:" + tab.id, tab.desc)}
       ${digestHtml()}
       ${base.length ? `
       <div class="filters">
@@ -437,16 +493,12 @@
     `;
 
     bindCards($app);
+    bindDesc($app);
+    bindTransfer($app);
     $app.querySelector("#lang")?.addEventListener("change", e => { state.lang = e.target.value; renderList(); });
     $app.querySelector("#cat")?.addEventListener("change", e => { state.cat = e.target.value; renderList(); });
     $app.querySelector("#sort")?.addEventListener("change", e => { state.sort = e.target.value; renderList(); });
     $app.querySelector("#only-new")?.addEventListener("click", () => { state.onlyNew = !state.onlyNew; renderList(); });
-    $app.querySelector("#copy-link")?.addEventListener("click", async e => {
-      const input = $app.querySelector(".transfer input");
-      try { await navigator.clipboard.writeText(input.value); e.target.textContent = "복사됨"; }
-      catch (_) { input.select(); e.target.textContent = "직접 복사해 주세요"; }
-      setTimeout(() => { e.target.textContent = "링크 복사"; }, 1800);
-    });
     $app.querySelector('.tab[aria-selected="true"]')?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
 
@@ -652,11 +704,20 @@
   }
 
   async function renderDetail(slug) {
+    const hash = `#/r/${encodeURIComponent(slug)}`;
+    // AI 홈에서 들어왔으면 돌아가는 곳도 AI 홈
+    const backLabel = backToNews ? "← AI 소식으로" : "← 목록으로";
+    window.scrollTo(0, 0);
+    if (!catalogReady) {
+      // 오늘 목록에 없는 저장소와 비슷한 라이브러리 추천은 카탈로그가 있어야 찾는다
+      $app.innerHTML = `<div class="detail"><p class="loading">불러오는 중…</p></div>`;
+      await loadCatalog();
+      if (location.hash !== hash) return;
+    }
     const key = keyOfSlug(slug);
     const base = key && repoOf(key);
-    window.scrollTo(0, 0);
     if (!base) {
-      $app.innerHTML = `<div class="detail"><button class="back" data-back>← 목록으로</button><p class="empty">저장소를 찾을 수 없어요.</p></div>`;
+      $app.innerHTML = `<div class="detail"><button class="back" data-back>${backLabel}</button><p class="empty">저장소를 찾을 수 없어요.</p></div>`;
       bindBack();
       return;
     }
@@ -672,7 +733,7 @@
       detailCache[slug] = d;
     }
     await loadSpark();
-    if (location.hash !== `#/r/${encodeURIComponent(slug)}`) return; // 기다리는 사이 다른 저장소나 화면으로 이동함
+    if (location.hash !== hash) return; // 기다리는 사이 다른 저장소나 화면으로 이동함
 
     const r = base;
     const s = d.summary;
@@ -698,7 +759,7 @@
 
     $app.innerHTML = `
       <article class="detail">
-        <button class="back" data-back>← 목록으로</button>
+        <button class="back" data-back>${backLabel}</button>
         <div class="d-head">
           <div class="chips">
             ${category ? `<span class="chip cat">${esc(category)}</span>` : ""}
@@ -749,20 +810,36 @@
 
   // ------------------------------------------------------------ 관심 목록 가져오기 (#/import/키,키)
 
-  function importSaved(csv) {
+  async function importSaved(arg) {
+    const [repoPart, newsPart = ""] = arg.split("&n=");
+    $app.innerHTML = `<p class="loading">가져오는 중…</p>`;
+    await loadCatalog();  // 저장본에 분류·태그·비슷한 도구까지 담으려고
     let n = 0;
-    for (const raw of decodeURIComponent(csv).split(",")) {
+    let csv = "";
+    try { csv = decodeURIComponent(repoPart); } catch (_) { /* 깨진 링크 */ }
+    for (const raw of csv.split(",")) {
       const key = raw.trim().toLowerCase();
       if (!/^[\w.-]+\/[\w.-]+$/.test(key) || isSaved(key)) continue;
       saved[key] = snapshot(key);
       n++;
     }
     store.set("gittrend:saved", saved);
-    state.tab = "saved";
-    store.set("gittrend:view", { tab: "saved" });
+    // 즐겨찾기한 AI 소식: 이쪽 news.json에 아직 있는 기사만 저장본을 만들 수 있다
+    let nNews = 0, missing = 0;
+    const ids = newsPart.split(",").map(x => x.trim()).filter(x => /^[0-9a-f]{6,40}$/.test(x));
+    if (ids.length) {
+      await loadNews();
+      for (const id of ids) {
+        if (isNewsSaved(id)) continue;
+        if (toggleNewsSave(id, true)) nNews++; else missing++;
+      }
+    }
+    if (!location.hash.startsWith("#/import/")) return;
     history.replaceState(null, "", "#/t/saved");
     route();
-    toast(n ? `관심 라이브러리 ${n}개를 가져왔어요` : "새로 가져올 라이브러리가 없어요");
+    const parts = [n ? `관심 라이브러리 ${n}개` : "", nNews ? `AI 소식 ${nNews}건` : ""].filter(Boolean);
+    toast((parts.length ? `${parts.join(", ")}을(를) 가져왔어요` : "새로 가져올 항목이 없어요") +
+      (missing ? ` (지난 소식 ${missing}건은 목록에서 빠져 가져오지 못했어요)` : ""));
   }
 
   // ------------------------------------------------------------ AI 레이더 (#/news)
@@ -772,22 +849,33 @@
   let news = null;
   // home: 구역별로 추린 AI 홈 화면 / false면 kind로 거른 전체 목록
   // saved: 즐겨찾기한 기사만 보기
-  const newsState = { home: true, saved: false, kind: "", sort: "latest", important: false, shown: NEWS_PAGE };
+  // unread: 안 읽은 것만 보기 (이 기기에 기억) / article: #/n/<id> 기사 하나 보기
+  const newsState = { home: true, saved: false, kind: "", sort: "latest", important: false, unread: !!store.get("gittrend:newsUnread", false), article: "", shown: NEWS_PAGE };
   const readNews = new Set(store.get("gittrend:read", []));
+  // 주소에 쓰는 짧은 이름: #/news/models 등 (목록에 없는 종류는 이름을 그대로 인코딩)
+  const KIND_SLUG = { "새 모델": "models", "도구·라이브러리": "tools", "사용법·팁": "tips", "업계 흐름": "trends" };
+  const kindHash = kind => kind ? `#/news/${KIND_SLUG[kind] || encodeURIComponent(kind)}` : "#/news/all";
+  function kindOfSlug(slug) {
+    const hit = Object.entries(KIND_SLUG).find(([, v]) => v === slug);
+    if (hit) return hit[0];
+    try { return decodeURIComponent(slug); } catch (_) { return ""; }
+  }
+  // 마지막으로 펼친 기사 (IdeaBox 버튼이 그 기사 주소를 보내도록)
+  let openArticle = "";
   // 즐겨찾기한 기사: id -> 저장 당시의 기사 전체 (30일이 지나 목록에서 빠져도 카드까지 그대로 볼 수 있게)
   let savedNews = store.get("gittrend:newsSaved", {});
   if (!savedNews || typeof savedNews !== "object") savedNews = {};
   const isNewsSaved = id => Object.prototype.hasOwnProperty.call(savedNews, id);
 
-  function toggleNewsSave(id) {
+  function toggleNewsSave(id, quiet = false) {
     if (isNewsSaved(id)) {
       delete savedNews[id];
-      toast("즐겨찾기에서 뺐어요");
+      if (!quiet) toast("즐겨찾기에서 뺐어요");
     } else {
       const a = (news.articles || []).find(x => x.id === id);
       if (!a) return false;
       savedNews[id] = { ...a, saved_at: Date.now() };
-      toast("★ 즐겨찾기에 저장했어요");
+      if (!quiet) toast("★ 즐겨찾기에 저장했어요");
     }
     store.set("gittrend:newsSaved", savedNews);
     return isNewsSaved(id);
@@ -830,6 +918,7 @@
     let rows = (newsState.saved ? savedNewsRows() : news.articles || []).filter(a => {
       if (newsState.kind && a.kind !== newsState.kind) return false;
       if (newsState.important && !(a.importance >= 4)) return false;
+      if (newsState.unread && !newsState.saved && readNews.has(a.id)) return false;
       if (!q) return true;
       const c = a.card || {};
       return [a.title, a.title_ko, a.summary, a.snippet, a.source, a.kind, c.what, c.why, ...(c.points || [])]
@@ -866,7 +955,7 @@
       </div>`;
   }
 
-  function newsItemHtml(a, { showFit = false } = {}) {
+  function newsItemHtml(a, { showFit = false, open = false } = {}) {
     const imp = a.importance || 0;
     const link = esc(safeUrl(a.link));
     const retitled = a.title_ko && a.title_ko !== a.title;
@@ -879,6 +968,7 @@
         <span>${timeText(a.published)}</span>
         ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
         <button class="nsave" type="button" data-nsave="${esc(a.id)}" aria-pressed="${isNewsSaved(a.id)}"
+          aria-label="${isNewsSaved(a.id) ? "즐겨찾기 해제" : "즐겨찾기 추가"}"
           title="${isNewsSaved(a.id) ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장"}">${isNewsSaved(a.id) ? "★" : "☆"}</button>
       </div>`;
     const titles = `
@@ -898,8 +988,8 @@
       </details>` : ""}`;
     // 카드가 있으면 제목을 눌러 페이지 안에서 펼쳐 읽는다. 원문은 아래 작은 링크로만.
     const body = a.card ? `
-      <details class="radar" data-open="${esc(a.id)}">
-        <summary>${head}${titles}<span class="rc-toggle">자세히 보기</span></summary>
+      <details class="radar" data-open="${esc(a.id)}" ${open ? "open" : ""}>
+        <summary>${head}${titles}<span class="rc-toggle">${open ? "접기" : "자세히 보기"}</span></summary>
         ${radarCardHtml(a.card)}
       </details>` : `${head}${titles}`;
     return `
@@ -989,7 +1079,7 @@
       <section class="home-sec">
         <div class="home-head">
           <h2>${title}</h2>
-          ${more ? `<a class="home-more" href="${esc(more.href || "#/news")}" ${more.kind != null ? `data-goto="${esc(more.kind)}"` : ""}>${esc(more.label || "더 보기")} →</a>` : ""}
+          ${more ? `<a class="home-more" href="${esc(more.href || (more.kind != null ? kindHash(more.kind) : "#/news"))}">${esc(more.label || "더 보기")} →</a>` : ""}
         </div>
         ${sub ? `<p class="home-sub">${sub}</p>` : ""}
         ${inner}
@@ -1022,12 +1112,83 @@
     el?.classList.add("read");
   }
 
+  // news.json의 출처별 수집 결과(새 항목 수 / "실패" / "키 없음") 중 문제 있는 것만 한 줄로
+  function sourceIssuesHtml() {
+    const st = news.sources || {};
+    const failed = Object.keys(st).filter(k => st[k] === "실패");
+    const noKey = Object.keys(st).filter(k => st[k] === "키 없음");
+    if (!failed.length && !noKey.length) return "";
+    return `
+      <p class="news-foot src-issues">
+        ${failed.length ? `<span class="warn-text">이번 수집에서 가져오지 못한 출처: ${failed.map(esc).join(", ")}</span>` : ""}
+        ${noKey.length ? `<span>키가 없어 건너뛴 출처: ${noKey.map(esc).join(", ")}</span>` : ""}
+      </p>`;
+  }
+
+  const newsFootHtml = () => `
+      <p class="news-foot">
+        ${news.ai_enabled ? "" : "AI 정리가 꺼져 있어 원문 제목만 보여요. "}
+        AI 정리는 틀릴 수 있으니, 중요한 내용은 원문을 확인해 주세요.
+      </p>
+      ${sourceIssuesHtml()}`;
+
+  // 기사 카드의 즐겨찾기·펼치기·원문 링크·복사 버튼 연결 (목록과 기사 하나 보기가 같이 씀)
+  function bindNewsItems(root) {
+    root.querySelectorAll("[data-nsave]").forEach(b => b.addEventListener("click", e => {
+      e.preventDefault();   // 카드 제목 영역(summary) 안에 있어서, 누를 때 카드가 펼쳐지지 않게
+      e.stopPropagation();
+      const id = b.dataset.nsave;
+      const on = toggleNewsSave(id);
+      if (newsState.saved && !newsState.article && !newsState.home) {  // 즐겨찾기 화면에서 빼면 바로 목록에서 없앤다
+        const y = window.scrollY;
+        renderNews().then(() => window.scrollTo(0, y));
+        return;
+      }
+      root.querySelectorAll(`[data-nsave="${CSS.escape(id)}"]`).forEach(x => {
+        x.setAttribute("aria-pressed", on);
+        x.setAttribute("aria-label", on ? "즐겨찾기 해제" : "즐겨찾기 추가");
+        x.textContent = on ? "★" : "☆";
+        x.title = on ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장";
+      });
+      const n = root.querySelector(".nsaved-n");
+      if (n) n.textContent = Object.keys(savedNews).length;
+    }));
+    root.querySelectorAll("details.radar").forEach(d => d.addEventListener("toggle", () => {
+      d.querySelector(".rc-toggle").textContent = d.open ? "접기" : "자세히 보기";
+      if (d.open) { openArticle = d.dataset.open; markRead(d.dataset.open, d.closest(".news-item")); }
+      else if (openArticle === d.dataset.open) openArticle = "";
+    }));
+    root.querySelectorAll("[data-read]").forEach(a => a.addEventListener("click", () => markRead(a.dataset.read, a.closest(".news-item"))));
+    bindCopy(root);
+  }
+
+  // #/n/<id>: 기사 하나를 펼친 채로 보여준다 (새로고침·공유·IdeaBox용 주소)
+  function renderArticle(id) {
+    const a = (news.articles || []).find(x => x.id === id) || savedNews[id];
+    $app.innerHTML = `
+      <div class="detail news-one">
+        <button class="back" data-back>← AI 소식으로</button>
+        ${a ? `<div class="news-list">${newsItemHtml(a, { showFit: true, open: true })}</div>${newsFootHtml()}`
+          : `<p class="empty">이 소식을 찾을 수 없어요. 30일이 지나 목록에서 빠졌을 수 있어요.</p>`}
+      </div>`;
+    $app.querySelector("[data-back]").addEventListener("click", () => {
+      if (newsBackable) history.back();
+      else location.hash = "#/news";
+    });
+    if (!a) return;
+    openArticle = id;
+    markRead(id, $app.querySelector(".news-item"));
+    bindNewsItems($app);
+  }
+
   async function renderNews() {
     if (!news) {
       $app.innerHTML = `<p class="loading">불러오는 중…</p>`;
-      try { news = await getJson("data/news.json"); } catch (_) { news = { articles: [], sources: {} }; }
-      if (!location.hash.startsWith("#/news")) return;
+      await loadNews();
+      if (!isNewsHash(location.hash)) return;
     }
+    if (newsState.article) { renderArticle(newsState.article); return; }
+    openArticle = "";
     const all = news.articles || [];
     const rows = filteredNews();
     const kindCounts = {};
@@ -1039,6 +1200,7 @@
     if (!rows.length) {
       body = `<p class="empty">${newsState.saved
         ? (Object.keys(savedNews).length ? "조건에 맞는 즐겨찾기가 없어요." : "아직 즐겨찾기한 기사가 없어요. 기사 오른쪽 위의 ☆를 누르면 여기에 모여요.")
+        : newsState.unread && all.length ? "안 읽은 소식이 없어요. '안 읽은 것만'을 끄면 읽은 소식도 보여요."
         : all.length ? "조건에 맞는 소식이 없어요." : "아직 모은 소식이 없어요. 수집기(collect.py)를 실행해 주세요."}</p>`;
     } else if (newsState.saved || newsState.sort === "important") {
       body = `<div class="news-list">${page.map(newsItemHtml).join("")}</div>`;
@@ -1057,91 +1219,61 @@
     const showHome = newsState.home && !state.q.trim() && all.length > 0;
     const chips = `
       <div class="topic-chips">
-        <button type="button" class="tchip" data-view="home" aria-pressed="${showHome}">🏠 홈</button>
-        <button type="button" class="tchip" data-view="saved" aria-pressed="${!showHome && newsState.saved}">★ 즐겨찾기 <span class="nsaved-n">${Object.keys(savedNews).length}</span></button>
-        <button type="button" class="tchip" data-kind="" aria-pressed="${!showHome && !newsState.saved && !newsState.kind}">전체 <span>${all.length}</span></button>
-        ${kinds.map(k => `<button type="button" class="tchip" data-kind="${esc(k)}" aria-pressed="${!showHome && !newsState.saved && newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
+        <button type="button" class="tchip" data-href="#/news" aria-pressed="${showHome}">🏠 홈</button>
+        <button type="button" class="tchip" data-href="#/news/saved" aria-pressed="${!showHome && newsState.saved}">★ 즐겨찾기 <span class="nsaved-n">${Object.keys(savedNews).length}</span></button>
+        <button type="button" class="tchip" data-href="#/news/all" aria-pressed="${!showHome && !newsState.saved && !newsState.kind}">전체 <span>${all.length}</span></button>
+        ${kinds.map(k => `<button type="button" class="tchip" data-href="${esc(kindHash(k))}" aria-pressed="${!showHome && !newsState.saved && newsState.kind === k}">${KIND_ICON[k] || ""} ${esc(k)} <span>${kindCounts[k]}</span></button>`).join("")}
       </div>`;
+    const more = rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : "";
     const feed = newsState.saved ? `
-      <p class="tab-desc">☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. 이 기기 브라우저에만 저장돼요.</p>
+      ${descHtml("news:saved", "☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. 이 기기 브라우저에만 저장돼요.")}
       ${body}
-      ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}` : `
+      ${more}
+      ${transferHtml()}` : `
       <div class="filters">
         <select id="nsort" aria-label="정렬">
           <option value="latest" ${newsState.sort === "latest" ? "selected" : ""}>최신순</option>
           <option value="important" ${newsState.sort === "important" ? "selected" : ""}>중요도순</option>
         </select>
         ${all.some(a => a.ai) ? `<button type="button" class="toggle" id="important" aria-pressed="${newsState.important}">주요 소식만</button>` : ""}
+        <button type="button" class="toggle" id="unread" aria-pressed="${newsState.unread}">안 읽은 것만</button>
         <span class="count">${rows.length}건</span>
       </div>
       ${body}
-      ${rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : ""}`;
+      ${more}`;
 
     $app.innerHTML = `
-      <p class="tab-desc news-desc">나를 위한 AI 홈이에요. 새 모델, 뜨는 AI 라이브러리, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에 모았어요.
-        주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.</p>
+      ${descHtml("news:intro", `나를 위한 AI 홈이에요. 새 모델, 뜨는 AI 라이브러리, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에 모았어요.
+        주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.`, "news-desc")}
       ${showHome ? briefHtml() + chips + homeHtml(all) : chips + feed}
-      <p class="news-foot">
-        ${news.ai_enabled ? "" : "AI 정리가 꺼져 있어 원문 제목만 보여요. "}
-        AI 정리는 틀릴 수 있으니, 중요한 내용은 원문을 확인해 주세요.
-      </p>`;
+      ${newsFootHtml()}`;
 
     const rerender = () => { newsState.shown = NEWS_PAGE; renderNews(); };
-    const showFeed = (kind, saved = false) => {
-      Object.assign(newsState, { home: false, saved, kind });
-      rerender();
-      window.scrollTo(0, 0);
-    };
+    bindDesc($app);
+    bindTransfer($app);
+    bindNewsItems($app);
     $app.querySelectorAll(".tchip").forEach(b => b.addEventListener("click", () => {
-      if (b.dataset.view === "home") { Object.assign(newsState, { home: true, saved: false }); rerender(); }
-      else if (b.dataset.view === "saved") showFeed("", true);
-      else showFeed(b.dataset.kind);
+      if (location.hash === b.dataset.href) { window.scrollTo(0, 0); return; }
+      location.hash = b.dataset.href;
     }));
-    $app.querySelectorAll("[data-nsave]").forEach(b => b.addEventListener("click", e => {
-      e.preventDefault();   // 카드 제목 영역(summary) 안에 있어서, 누를 때 카드가 펼쳐지지 않게
-      e.stopPropagation();
-      const id = b.dataset.nsave;
-      const on = toggleNewsSave(id);
-      if (newsState.saved) {  // 즐겨찾기 화면에서 빼면 바로 목록에서 없앤다
-        const y = window.scrollY;
-        renderNews().then(() => window.scrollTo(0, y));
-        return;
-      }
-      $app.querySelectorAll(`[data-nsave="${CSS.escape(id)}"]`).forEach(x => {
-        x.setAttribute("aria-pressed", on);
-        x.textContent = on ? "★" : "☆";
-        x.title = on ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장";
-      });
-      const n = $app.querySelector(".nsaved-n");
-      if (n) n.textContent = Object.keys(savedNews).length;
-    }));
-    $app.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); showFeed(a.dataset.goto); }));
     $app.querySelector("#nsort")?.addEventListener("change", e => { newsState.sort = e.target.value; rerender(); });
     $app.querySelector("#important")?.addEventListener("click", () => { newsState.important = !newsState.important; rerender(); });
+    $app.querySelector("#unread")?.addEventListener("click", () => {
+      newsState.unread = !newsState.unread;
+      store.set("gittrend:newsUnread", newsState.unread);
+      rerender();
+    });
     $app.querySelector("#more")?.addEventListener("click", () => {
       const y = window.scrollY;
       newsState.shown += NEWS_PAGE;
       renderNews().then(() => window.scrollTo(0, y));
     });
-    $app.querySelectorAll("details.radar").forEach(d => d.addEventListener("toggle", () => {
-      d.querySelector(".rc-toggle").textContent = d.open ? "접기" : "자세히 보기";
-      if (d.open) markRead(d.dataset.open, d.closest(".news-item"));
-    }));
-    $app.querySelectorAll("[data-read]").forEach(a => a.addEventListener("click", () => markRead(a.dataset.read, a.closest(".news-item"))));
-    bindCopy($app);
-    $app.querySelectorAll("[data-jump]").forEach(a => a.addEventListener("click", async e => {
+    $app.querySelectorAll("[data-jump]").forEach(a => a.addEventListener("click", e => {
       e.preventDefault();
       const id = a.dataset.jump;
-      if (!document.getElementById("n-" + id)) {
-        // 홈에 없거나 아직 펼치지 않은 뒤쪽 항목이면 전체 목록에서 거기까지 펼친다
-        Object.assign(newsState, { home: false, saved: false, kind: "", important: false });
-        const idx = filteredNews().findIndex(x => x.id === id);
-        if (idx < 0) return;
-        newsState.shown = Math.ceil((idx + 1) / NEWS_PAGE) * NEWS_PAGE;
-        await renderNews();
-      }
       const el = document.getElementById("n-" + id);
-      if (!el) return;
+      // 홈에 없는 항목이면 그 기사 하나 보기로 간다
+      if (!el) { location.hash = `#/n/${id}`; return; }
       const card = el.querySelector("details.radar");
       if (card) card.open = true;
       el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1152,9 +1284,12 @@
 
   // ------------------------------------------------------------ 라우팅
   //   #/            처음 화면 = AI 홈
-  //   #/t/<탭>      라이브러리 목록
+  //   #/t/<목록>    라이브러리 목록 (hot, saved, daily·weekly·monthly = 트렌딩, new7·new30 = 새로 뜬, hn, rising)
+  //                 #/t/trend, #/t/new 는 마지막으로 고른 기간으로 바꿔 연다
   //   #/r/<저장소>  라이브러리 상세
   //   #/news        AI 홈 (추천 · 뜨는 AI 라이브러리 · 새 모델 · 활용법 · 도구 업데이트)
+  //   #/news/all    AI 소식 전체 목록, #/news/<models|tools|tips|trends> 종류별, #/news/saved 즐겨찾기
+  //   #/n/<id>      AI 소식 하나 (펼친 카드)
   //   #/import/...  관심 목록 가져오기
 
   let listScroll = 0;
@@ -1162,7 +1297,11 @@
   let onList = false;
   let lastListTab = null;
   let onNews = false;
+  let onNewsList = false;
   let backToNews = false;
+  let newsBackable = false;  // 기사 하나 보기에서 '뒤로'가 AI 소식 목록으로 돌아가는지
+
+  const isNewsHash = h => h.startsWith("#/news") || h.startsWith("#/n/");
 
   function setSection(name) {
     document.querySelectorAll(".sec").forEach(a => a.setAttribute("aria-current", a.dataset.sec === name ? "page" : "false"));
@@ -1170,6 +1309,17 @@
     document.getElementById("sources").textContent = name === "news"
       ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · GitTrend 라이브러리"
       : "출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록";
+  }
+
+  // 주소 → AI 소식 화면 상태
+  function newsStateOf(h) {
+    let m;
+    if ((m = h.match(/^#\/n\/([0-9a-f]{6,40})$/))) return { article: m[1] };
+    const sub = (h.match(/^#\/news\/([^/?#]+)/) || [])[1] || "";
+    if (!sub) return { article: "", home: true, saved: false, kind: "" };
+    if (sub === "saved") return { article: "", home: false, saved: true, kind: "" };
+    if (sub === "all") return { article: "", home: false, saved: false, kind: "" };
+    return { article: "", home: false, saved: false, kind: kindOfSlug(sub) };
   }
 
   function route() {
@@ -1180,19 +1330,32 @@
       route();
       return;
     }
-    if (h.startsWith("#/news")) {
+    // 화면을 바꾸기 전에 보던 AI 소식 목록의 스크롤 위치를 기억 (돌아오면 그 자리로)
+    if (onNewsList) newsScroll = window.scrollY;
+    if (isNewsHash(h)) {
       setSection("news");
+      const next = newsStateOf(h);
+      if (next.article) {
+        newsBackable = onNews;
+        backToNews = backToNews || onNewsList;
+      } else {
+        const changed = next.home !== newsState.home || next.saved !== newsState.saved || next.kind !== newsState.kind;
+        if (changed) newsState.shown = NEWS_PAGE;
+      }
+      Object.assign(newsState, next);
       onList = false;
       cameFromList = false;
-      const back = backToNews;
-      backToNews = false;
+      const back = !next.article && backToNews;
+      if (!next.article) backToNews = false;
       onNews = true;
-      // 홈에서 라이브러리를 보고 돌아오면 보던 자리로
+      onNewsList = !next.article;
+      // 홈에서 라이브러리나 기사 하나를 보고 돌아오면 보던 자리로
       renderNews().then(() => window.scrollTo(0, back ? newsScroll : 0));
       if (!back) window.scrollTo(0, 0);
       return;
     }
     setSection("lib");
+    onNewsList = false;
     if ((m = h.match(/^#\/r\/(.+)$/))) {
       cameFromList = onList || onNews;
       backToNews = onNews;
@@ -1207,7 +1370,12 @@
       importSaved(m[1]);
       return;
     }
-    if ((m = h.match(/^#\/t\/([\w]+)$/)) && TAB_IDS.has(m[1])) {
+    const group = (m = h.match(/^#\/t\/([\w]+)$/)) && TABS.find(t => t.id === m[1] && t.views);
+    if (group) {
+      // #/t/trend, #/t/new → 마지막으로 고른 기간
+      state.tab = viewOfTab(group);
+      history.replaceState(null, "", `#/t/${state.tab}`);
+    } else if (m && TAB_IDS.has(m[1])) {
       state.tab = m[1];
     } else {
       // 주소에 탭이 없으면: 처음 열 때는 마지막에 본 탭(비어 있으면 종합 주목), 그 밖에는 종합 주목.
@@ -1219,12 +1387,22 @@
       history.replaceState(null, "", `#/t/${t}`);
     }
     const backFromDetail = cameFromList && !onList && lastListTab === state.tab;
-    if (lastListTab !== state.tab) Object.assign(state, { lang: "", cat: "", sort: "rank", onlyNew: false });
+    // 같은 탭 안에서 기간만 바꾸면 언어·분류 필터는 그대로 둔다
+    if (tabOf(lastListTab) !== tabOf(state.tab)) Object.assign(state, { lang: "", cat: "", sort: "rank", onlyNew: false });
     onList = true;
     lastListTab = state.tab;
-    store.set("gittrend:view", { tab: state.tab });
-    renderList();
-    window.scrollTo(0, backFromDetail ? listScroll : 0);
+    const tab = tabOf(state.tab);
+    if (tab.views) lastView[tab.id] = state.tab;
+    store.set("gittrend:view", { tab: state.tab, periods: lastView });
+    const show = () => { renderList(); window.scrollTo(0, backFromDetail ? listScroll : 0); };
+    if (state.tab === "saved" && !catalogReady) {
+      // 관심 탭의 추천·마지막 순위는 카탈로그가 있어야 계산된다
+      $app.innerHTML = `<p class="loading">불러오는 중…</p>`;
+      const want = location.hash;
+      loadCatalog().then(() => { if (location.hash === want) show(); });
+    } else {
+      show();
+    }
   }
 
   window.addEventListener("hashchange", route);
@@ -1238,36 +1416,76 @@
     clearTimeout(qTimer);
     qTimer = setTimeout(() => {
       state.q = $q.value;
-      if (location.hash.startsWith("#/news")) { newsState.shown = NEWS_PAGE; renderNews(); }
+      if (isNewsHash(location.hash)) {
+        if (newsState.article) location.hash = "#/news/all";  // 기사 하나 보기에서는 전체 목록에서 찾는다
+        else { newsState.shown = NEWS_PAGE; renderNews(); }
+      }
       else if (location.hash.startsWith("#/r/")) location.hash = `#/t/${state.tab}`;
       else renderList();
     }, 150);
   });
 
-  // ------------------------------------------------------------ 시작
+  // ------------------------------------------------------------ 데이터 불러오기
 
   const getJson = url => fetch(url, { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
-  Promise.all([getJson("data/index.json"), getJson("data/catalog.json").catch(() => ({}))])
-    .then(([d, c]) => {
+  // catalog.json은 크고 첫 화면에는 필요 없어서, 관심 탭·상세·가져오기에서 처음 쓸 때 받는다
+  function loadCatalog() {
+    if (!catalogLoad) {
+      catalogLoad = getJson("data/catalog.json").catch(() => ({})).then(c => {
+        catalog = c || {};
+        catalogReady = true;
+        // 저장해 둔 관심 라이브러리 정보를 최신 값으로 갱신
+        let changed = false;
+        for (const k in saved) {
+          if (catalog[k]) { saved[k] = { ...snapshot(k), saved_at: saved[k].saved_at }; changed = true; }
+        }
+        if (changed) store.set("gittrend:saved", saved);
+      });
+    }
+    return catalogLoad;
+  }
+
+  let newsLoad = null;
+  function loadNews() {
+    if (!newsLoad) {
+      newsLoad = getJson("data/news.json")
+        .catch(() => ({ articles: [], sources: {}, load_failed: true }))
+        .then(n => { news = n || { articles: [], sources: {} }; return news; });
+    }
+    return newsLoad;
+  }
+
+  // 수집은 하루 두 번(07·18시). 16시간 넘게 새 데이터가 없거나 AI 정리가 실패했으면 화면 위에 알린다.
+  const STALE_HOURS = 16;
+  const statusNotes = {};
+  function setStatusNote(key, text) {
+    statusNotes[key] = text;
+    const note = document.getElementById("status-note");
+    if (!note) return;
+    const all = Object.values(statusNotes).filter(Boolean);
+    note.textContent = all.join(" ");
+    note.hidden = !all.length;
+  }
+  const hoursSince = iso => (Date.now() - new Date(iso).getTime()) / 3600_000;
+
+  // 첫 화면 시작: index.json과 news.json을 동시에 받는다 (이 줄부터는 테스트가 잘라 내고 대신 넣음)
+  loadNews().then(n => {
+    if (n.load_failed) setStatusNote("news", "AI 소식 데이터(news.json)를 불러오지 못했어요.");
+    else if (n.generated_at && hoursSince(n.generated_at) > STALE_HOURS) {
+      setStatusNote("news", `AI 소식이 ${Math.floor(hoursSince(n.generated_at))}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
+    }
+  });
+  getJson("data/index.json")
+    .then(d => {
       data = d;
-      catalog = c || {};
-      // 저장해 둔 관심 라이브러리 정보를 최신 값으로 갱신
-      let changed = false;
-      for (const k in saved) {
-        if (catalog[k]) { saved[k] = { ...snapshot(k), saved_at: saved[k].saved_at }; changed = true; }
-      }
-      if (changed) store.set("gittrend:saved", saved);
       const t = new Date(d.generated_at);
       document.getElementById("updated").textContent =
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-      // 수집은 하루 두 번(07·18시). 16시간 넘게 새 데이터가 없거나 AI 정리가 실패했으면 화면 위에 알립니다.
-      const hours = (Date.now() - t.getTime()) / 3600_000;
       const notes = [];
       if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(OpenAI 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
-      if (hours > 16) notes.push(`데이터가 ${Math.floor(hours)}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
-      const note = document.getElementById("status-note");
-      if (note && notes.length) { note.textContent = notes.join(" "); note.hidden = false; }
+      if (hoursSince(d.generated_at) > STALE_HOURS) notes.push(`라이브러리 데이터가 ${Math.floor(hoursSince(d.generated_at))}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
+      setStatusNote("index", notes.join(" "));
       route();
     })
     .catch(() => {
@@ -1276,12 +1494,20 @@
 
   // ---------- IdeaBox로 아이디어 보내기
   // 누르는 순간의 화면(주소·제목)을 담아 IdeaBox 빠른 입력 창을 엽니다. 저장은 IdeaBox 창에서 버튼을 눌러야 됩니다.
+  // AI 소식 카드를 펼쳐 둔 상태면 그 기사 주소(#/n/<id>)와 제목을 보냅니다.
   const ideaBtn = document.getElementById("idea-btn");
   if (ideaBtn) {
     const ideaUrl = () => {
-      const heading = document.querySelector("#app h1, #app h2")?.textContent?.trim();
+      let url = location.href;
+      let heading = document.querySelector("#app h1, #app h2")?.textContent?.trim();
+      const a = openArticle && isNewsHash(location.hash) && news
+        ? (news.articles || []).find(x => x.id === openArticle) || savedNews[openArticle] : null;
+      if (a) {
+        url = `${location.origin}${location.pathname}#/n/${openArticle}`;
+        heading = newsTitle(a);
+      }
       const title = heading ? `${heading} · GitTrend` : document.title;
-      return `https://idea.hyperkwon.com/new?src=GitTrend&url=${encodeURIComponent(location.href)}&title=${encodeURIComponent(title)}`;
+      return `https://idea.hyperkwon.com/new?src=GitTrend&url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
     };
     // 가운데 클릭·새 탭으로 열기에도 지금 화면 주소가 담기도록 가리킬 때마다 갱신
     ["pointerenter", "focus", "touchstart"].forEach((ev) => ideaBtn.addEventListener(ev, () => { ideaBtn.href = ideaUrl(); }, { passive: true }));

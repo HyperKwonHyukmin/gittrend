@@ -7,7 +7,7 @@ const { test } = require("node:test");
 function createPage() {
   let source = fs.readFileSync(path.join(__dirname, "../docs/app.js"), "utf8");
   // Keep the real rendering code and replace network startup with controlled data.
-  const startup = source.lastIndexOf('  Promise.all([getJson("data/index.json")');
+  const startup = source.lastIndexOf("  // 첫 화면 시작");
   assert.ok(startup >= 0);
   source = source.slice(0, startup) + `
     data = { repos: {
@@ -15,6 +15,7 @@ function createPage() {
       "b/two": { full_name: "b/two", slug: "b__two" }
     }, ai_enabled: false };
     catalog = {};
+    catalogReady = true;
     spark = { days: [], stars: {} };
     globalThis.render = renderDetail;
   })();`;

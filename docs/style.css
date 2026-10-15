@@ -120,6 +120,23 @@ button { font: inherit; color: inherit; }
 .tab[aria-selected="true"] .n { color: var(--bg); opacity: .7; }
 
 .tab-desc { color: var(--ink-2); margin: 10px 0 0; font-size: 14px; }
+/* 처음 보는 사람용 설명: 닫으면 이 기기에서는 다시 안 보임 */
+.desc-close {
+  font: inherit; font-size: 12.5px; color: var(--ink-3); cursor: pointer;
+  background: none; border: 0; padding: 2px 4px; margin-left: 4px; text-decoration: underline; text-underline-offset: 2px;
+}
+.desc-close:hover, .desc-close:focus-visible { color: var(--ink); }
+
+/* 기간 선택 (트렌딩: 오늘·이번 주·이번 달 / 새로 뜬: 7일·30일) */
+.period { display: flex; gap: 4px; margin: 10px 0 0; flex-wrap: wrap; }
+.pchip {
+  text-decoration: none; font-size: 13.5px; font-weight: 600; color: var(--ink-2);
+  border: 1px solid var(--line); background: var(--surface); padding: 5px 12px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.pchip .n { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.pchip[aria-current="page"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.pchip[aria-current="page"] .n { color: var(--accent-ink); }
 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 18px; }
 .filters select {
@@ -478,6 +495,8 @@ details.radar[open] .rc-toggle::after { content: " ▴"; }
 }
 .more:hover { border-color: var(--accent); color: var(--ink); }
 .news-foot { color: var(--ink-3); font-size: 12.5px; margin-top: 18px; }
+.src-issues { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.news-one .news-list { margin-top: 10px; }
 
 /* ---------- 심층 분석 */
 .deep-top {
