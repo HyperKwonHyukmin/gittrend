@@ -89,6 +89,14 @@ jobs:
           done
           exit 1
 
+      - name: 화면에 배포 버전 표시
+        run: |
+          git fetch -q --deepen=100 origin "${GITHUB_REF_NAME}" || true
+          SHA=$(git log -1 --format=%h --abbrev=7 -- . ':!docs/data' ':!data')
+          SHA=${SHA:-${GITHUB_SHA::7}}
+          AT=$(TZ=KST-9 date '+%-m/%-d %H:%M')
+          sed -i "s|<!--hk-build-->|<div id=\"hk-build\" aria-hidden=\"true\" style=\"position:fixed;left:6px;bottom:2px;z-index:2147483000;pointer-events:none;font:500 10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:rgba(128,128,128,.95);background:rgba(128,128,128,.12);padding:0 6px;border-radius:6px;white-space:nowrap\">${SHA} · ${AT} 배포</div>|" docs/index.html
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
