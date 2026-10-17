@@ -592,3 +592,6 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
   .theme span { display: none; }
   .transfer-row { flex-direction: column; }
 }
+
+/* 휴대폰에서는 배포 버전 표시를 숨김(2026-10-17) */
+@media (max-width: 640px) { #hk-build { display: none !important; } }
