@@ -1309,7 +1309,7 @@
     document.querySelectorAll(".sec").forEach(a => a.setAttribute("aria-current", a.dataset.sec === name ? "page" : "false"));
     $q.placeholder = name === "news" ? "모델, 도구, 내용으로 찾기" : "이름, 설명, 태그로 찾기";
     document.getElementById("sources").textContent = name === "news"
-      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · GitTrend 라이브러리"
+      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · 토스 · 네이버 D2 · 카카오 · 당근 · 데보션 · 국내 블로그(카카오 검색) · GitTrend 라이브러리"
       : "출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록";
   }
 
