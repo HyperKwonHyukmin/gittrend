@@ -70,6 +70,10 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 | 도구 릴리스 | Claude Code, Codex CLI, OpenAI Python SDK, Ollama, Vite, React, Playwright, Capacitor의 GitHub 릴리스 (시험판 제외, `news.py`의 `TOOL_REPOS`에서 바꿀 수 있음) |
 | 사용법·흐름 | Simon Willison, Latent Space, GeekNews (AI 글만), Hacker News (AI 화제글) |
 | 사람들의 활용법 | Reddit (r/ClaudeAI · r/LocalLLaMA · r/ChatGPTCoding 이번 주 인기), Hacker News (Claude Code · Codex · Cursor · MCP 사용기), dev.to, Lobsters |
+| 국내 | 회사 기술 블로그(토스 · 네이버 D2 · 카카오 · 우아한형제들 · 당근 · 데보션)와 요즘IT의 AI 글, 개인 블로그 사용기(카카오 블로그 검색: Claude Code · Codex · Cursor · MCP · 바이브 코딩 · Gemini CLI) |
+
+- **국내 블로그 거르기:** 하루 수십 건이 올라오고 검색 노출용 글이 많아서, 먼저 비용 없이 거릅니다(제목에 검색어가 없는 글, 브리핑·뉴스 모음, 협찬·광고 문구). 남은 글은 AI가 "직접 써 보고 겪은 내용이 구체적인가"로 한 번 더 판단합니다. 검색어는 `news.py`의 `KO_BLOG_QUERIES`에서 바꿉니다. `KAKAO_REST_API_KEY`가 없으면 이 출처만 건너뜁니다.
+- SNS(X · Threads)는 API가 막혔거나 유료라 넣지 않았습니다.
 
 - **판단:** 새 항목을 40건씩 묶어 한 번에 보내서 남길지(투자·소송·정책·홍보는 뺌), 같은 소식 묶기, 한국어 제목, 1~2문장 요약, 분류, 중요도(1~5)를 받습니다. 처리한 항목은 `data/news_seen.json`에 기록해 다시 보내지 않습니다.
 - **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준, 높음/보통/낮음)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 12)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
@@ -108,7 +112,7 @@ data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 �
 
 1. GitHub에 **Public** 저장소를 만들고 이 폴더를 올립니다. (`.env`는 `.gitignore`에 있어서 올라가지 않습니다.)
 2. 저장소 **Settings → Secrets and variables → Actions**
-   - Secrets 탭: `OPENAI_API_KEY` 추가
+   - Secrets 탭: `OPENAI_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
    - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
      `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 12)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.

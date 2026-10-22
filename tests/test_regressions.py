@@ -1,6 +1,7 @@
 import contextlib
 import datetime as dt
 import io
+import json
 import os
 import unittest
 from unittest.mock import patch
@@ -106,6 +107,44 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(saved["articles"], [])
         self.assertEqual(saved["kinds"], news.KINDS)
         self.assertIsNone(saved["brief"])
+
+
+class KoBlogTests(unittest.TestCase):
+    def doc(self, title, url, contents="Claude Code를 직접 써 본 기록", when="2026-10-22T09:00:00.000+09:00"):
+        return {"title": title, "url": url, "contents": contents, "datetime": when, "blogname": "개발 일지"}
+
+    def test_without_key_the_source_is_skipped(self):
+        with patch.dict(os.environ, {"KAKAO_REST_API_KEY": ""}):
+            self.assertIsNone(news.ko_blogs(30))
+
+    def test_mechanical_filters_and_naver_body_url(self):
+        docs = [
+            self.doc("<b>Claude Code</b>와 서브에이전트 워크플로 짜는 법", "https://a.tistory.com/9"),
+            self.doc("클로드 코드 권한 모드 정리", "https://blog.naver.com/someone/224246149312",
+                     when="2026-10-22T10:00:00.000+09:00"),
+            self.doc("주식 시장 오늘 흐름", "https://b.tistory.com/1"),               # 제목에 검색어 없음
+            self.doc("2026-10-22 AI Developer Brief: Claude Code", "https://c.tistory.com/2"),  # 소식 모음
+            self.doc("Claude Code 사용기", "https://d.tistory.com/3", contents="소정의 원고료를 받아 작성"),  # 협찬
+        ]
+        body = json.dumps({"documents": docs})
+        with patch.dict(os.environ, {"KAKAO_REST_API_KEY": "k"}), \
+                patch.object(news.core, "http_get", return_value=(body, {})) as get:
+            out = news.ko_blogs(30)
+        self.assertEqual(get.call_count, len(news.KO_BLOG_QUERIES))
+        self.assertEqual([a["link"] for a in out],
+                         ["https://blog.naver.com/someone/224246149312", "https://a.tistory.com/9"])
+        self.assertEqual(out[0]["body_url"],
+                         "https://m.blog.naver.com/PostView.naver?blogId=someone&logNo=224246149312")
+        self.assertEqual(out[1]["source"], "블로그 · 개발 일지")
+        self.assertEqual(out[1]["title"], "Claude Code와 서브에이전트 워크플로 짜는 법")
+
+    def test_naver_paragraphs_are_used_as_body(self):
+        page = ('<div class="menu">메뉴</div><p class="se-text-paragraph se-text-paragraph-align-">첫 문단</p>'
+                '<p class="se-text-paragraph">둘째 <b>문단</b></p>')
+        a = {"id": "x", "source": "블로그 · t", "link": "https://blog.naver.com/a/1",
+             "body_url": "https://m.blog.naver.com/PostView.naver?blogId=a&logNo=1"}
+        with patch.object(news.core, "http_get", return_value=(page, {"Content-Type": "text/html"})):
+            self.assertEqual(news.fetch_body(a), "첫 문단 둘째 문단")
 
 
 class CollectorTests(unittest.TestCase):

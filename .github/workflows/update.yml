@@ -52,6 +52,7 @@ jobs:
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
           MAX_NEWS_CARDS: ${{ vars.MAX_NEWS_CARDS }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: python collect.py
 
       # 심층 분석 요청 이슈만 처리 (수집은 하지 않음)
