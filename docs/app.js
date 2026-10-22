@@ -1105,7 +1105,7 @@
       ${homeSec("💡 사람들은 이렇게 써요", "Reddit · Hacker News · GeekNews · 블로그의 실제 사용기와 팁", list(usage), { kind: "사용법·팁" })}
       ${homeSec("📦 내 도구 업데이트", "Claude Code, Codex, Vite, Playwright 등 쓰는 도구의 새 버전", list(tools), { kind: "도구·라이브러리" })}
       ${homeSec("📈 업계 흐름", "", list(trends), { kind: "업계 흐름" })}
-      ${homeSec("🖥️ IT 소식", "GeekNews · Hacker News에서 AI 밖의 개발자 소식", list(it), { kind: "IT 소식" })}`;
+      ${homeSec("🖥️ IT 소식", "GeekNews · Hacker News · 바이라인네트워크에서 AI 밖의 개발자 소식", list(it), { kind: "IT 소식" })}`;
   }
 
   function markRead(id, el) {
@@ -1309,7 +1309,7 @@
     document.querySelectorAll(".sec").forEach(a => a.setAttribute("aria-current", a.dataset.sec === name ? "page" : "false"));
     $q.placeholder = name === "news" ? "모델, 도구, 내용으로 찾기" : "이름, 설명, 태그로 찾기";
     document.getElementById("sources").textContent = name === "news"
-      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · 토스 · 네이버 D2 · 카카오 · 당근 · 데보션 · 국내 블로그(카카오 검색) · GitTrend 라이브러리"
+      ? "출처: OpenRouter · Hugging Face · OpenAI · Google DeepMind · Google AI · GitHub 릴리스 · Simon Willison · Latent Space · GeekNews · Hacker News · Reddit · dev.to · Lobsters · 토스 · 네이버 D2 · 카카오 · 당근 · 데보션 · 국내 블로그(카카오 검색) · 바이라인네트워크 · GitTrend 라이브러리"
       : "출처: GitHub Trending · GitHub 검색 · Hacker News · 자체 star 기록";
   }
 

@@ -70,7 +70,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 | 공식 발표 | OpenAI, Google DeepMind, Google AI, Hugging Face 블로그 |
 | 도구 릴리스 | Claude Code, Codex CLI, OpenAI Python SDK, Ollama, Vite, React, Playwright, Capacitor의 GitHub 릴리스 (시험판 제외, `news.py`의 `TOOL_REPOS`에서 바꿀 수 있음) |
 | 사용법·흐름 | Simon Willison, Latent Space, GeekNews, Hacker News (AI 화제글) |
-| IT 소식 | GeekNews 전체 글과 Hacker News 화제글(3일 안 300점 이상 상위 10건) 중 AI가 아닌 것. 카드는 중요도 4 이상만, 오늘의 AI 레이더 요약에는 넣지 않음 |
+| IT 소식 | GeekNews 전체 글, Hacker News 화제글(3일 안 300점 이상 상위 10건), 바이라인네트워크(국내 IT 언론) 중 AI가 아닌 것. 카드는 중요도 4 이상만, 오늘의 AI 레이더 요약에는 넣지 않음 |
 | 사람들의 활용법 | Reddit (r/ClaudeAI · r/LocalLLaMA · r/ChatGPTCoding 이번 주 인기), Hacker News (Claude Code · Codex · Cursor · MCP 사용기), dev.to, Lobsters |
 | 국내 | 회사 기술 블로그(토스 · 네이버 D2 · 카카오 · 당근 · 데보션)의 AI 글, 개인 블로그 사용기(카카오 블로그 검색: Claude Code · Codex · Cursor · MCP · 바이브 코딩 · Gemini CLI) |
 

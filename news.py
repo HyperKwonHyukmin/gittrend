@@ -354,6 +354,8 @@ SOURCES = [
     ("당근 테크", lambda: rss_source("https://medium.com/feed/daangn", "당근 테크", 3, need_ai_words=True)),
     ("데보션", lambda: rss_source("https://devocean.sk.com/blog/rss.do", "데보션", 3, need_ai_words=True)),
     ("국내 블로그", lambda: ko_blogs(30)),
+    # 국내 IT 언론: 금융·증시 기사가 적은 곳만. 블로터·전자신문·IT조선은 대부분 버려질 기사라 넣지 않았다
+    ("바이라인네트워크", lambda: rss_source("https://byline.network/feed/", "바이라인네트워크", 10)),
 ]
 
 
@@ -399,6 +401,7 @@ NEWS_PROMPT = """너는 AI 소식을 한 명의 한국인 개발자를 위해 �
    업계 흐름: 그 밖의 AI 흐름·연구·발표 /
    IT 소식: AI와 관련 없는 개발자 소식 — 위의 네 분류는 AI 관련일 때만 쓴다)
   IT 소식은 개발자 여럿이 이야기할 만한 것만 남긴다. 개인 프로젝트 소개(Show HN 등)·짧은 의견글은 대개 false.
+  국내 IT 언론(바이라인네트워크) 기사 중 기업의 AI 도입·제품 출시·대표 인터뷰처럼 보도자료에 가까운 글은 false.
   IT 소식의 importance는 보통 2~3, 쓰는 기술(웹·Python·Windows·GitHub)에 직접 영향이 있거나 큰 보안 사고면 4.
   Reddit·dev.to·HN의 사용기는 구체적인 방법이나 교훈이 있으면 남기고, 단순 질문·불평·밈·자랑은 뺀다.
   출처가 '블로그 ·'로 시작하는 국내 개인 블로그 글은 기본이 keep=false다. 하루 수십 건이 올라오고 대부분 검색 노출용이다.
