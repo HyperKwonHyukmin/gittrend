@@ -5,7 +5,8 @@
   새 모델     OpenRouter 모델 목록(등록일·가격·컨텍스트), Hugging Face 인기 모델
   공식 발표   OpenAI, Google DeepMind, Google AI, Hugging Face 블로그
   도구 릴리스 자주 쓰는 도구의 GitHub 릴리스 (TOOL_REPOS)
-  사용법      Simon Willison, Latent Space, GeekNews(AI 글만), Hacker News(AI 화제글)
+  사용법      Simon Willison, Latent Space, GeekNews, Hacker News(AI 화제글)
+  IT 소식     GeekNews·Hacker News 화제글 중 AI가 아닌 개발자 소식
   국내        회사 기술 블로그(AI 글만), 개인 블로그 사용기(카카오 블로그 검색, KAKAO_REST_API_KEY)
 
 AI(OpenAI) 사용 원칙: 항목 하나당 한 번만.
@@ -47,7 +48,8 @@ CARD_MIN_IMPORTANCE = 3  # 이 이상만 카드를 만든다
 CARD_MAX_TRIES = 2       # 카드 만들기가 계속 실패하는 항목은 포기한다
 BODY_LIMIT = 9000        # 카드 만들 때 AI에게 주는 본문 길이
 
-KINDS = ["새 모델", "도구·라이브러리", "사용법·팁", "업계 흐름"]
+KINDS = ["새 모델", "도구·라이브러리", "사용법·팁", "업계 흐름", "IT 소식"]
+IT_KIND = "IT 소식"  # AI가 아닌 개발자 소식. 카드는 아껴 쓰고, AI 브리핑에는 넣지 않는다
 
 # 따라가는 도구의 GitHub 릴리스 (profile.md의 '쓰는 기술' 기준)
 TOOL_REPOS = [
@@ -86,7 +88,7 @@ KO_BLOG_AD = re.compile(r"원고료|협찬|제공받아|제공 받아|파트너�
 KO_BLOG_ROUNDUP = re.compile(r"brief|브리핑|데일리|daily|뉴스레터|tldr|오늘의 ai|ai 트렌드|ai 뉴스|주간|소식 모음", re.I)
 # 검색 노출용 목록·안내 글 ("추천 7가지", "17선", "완벽 가이드", "총정리")
 KO_BLOG_LISTICLE = re.compile(r"추천|\d+\s*(가지|선)\b|top\s*\d+|완벽|총정리|가이드$|순위", re.I)
-KO_BLOG_CARD_MIN = 4  # 국내 블로그는 카드(원문 읽고 정리)를 중요도 4 이상만 만든다. 카드 몫을 블로그가 다 가져가지 않게
+KO_BLOG_CARD_MIN = 4  # 국내 블로그·IT 소식은 카드(원문 읽고 정리)를 중요도 4 이상만 만든다. 카드 몫을 다 가져가지 않게
 
 BODIES = {}  # id -> 피드에 들어 있던 본문 (이번 실행에서 카드 만들 때만 쓰고 저장하지 않는다)
 
@@ -249,8 +251,8 @@ def hf_models(limit, min_likes=100):
     return out
 
 
-def hn_search(queries, limit, min_points):
-    """Hacker News 검색. 같은 글이 여러 검색어에 걸리면 한 번만."""
+def hn_search(queries, limit, min_points, ai_only=True):
+    """Hacker News 검색. 같은 글이 여러 검색어에 걸리면 한 번만. ai_only=False면 검색어 없이 화제글 전체."""
     since = int(dt.datetime.now().timestamp()) - FRESH_HOURS * 3600
     hits = {}
     for q in queries:
@@ -258,7 +260,7 @@ def hn_search(queries, limit, min_points):
                f"&numericFilters=points>{min_points},created_at_i>{since}&hitsPerPage=30")
         body, _ = core.http_get(url)
         for h in json.loads(body).get("hits", []):
-            if AI_WORDS.search(h.get("title") or ""):
+            if not ai_only or AI_WORDS.search(h.get("title") or ""):
                 hits[h["objectID"]] = h
     out = []
     for h in sorted(hits.values(), key=lambda h: -(h.get("points") or 0))[:limit]:
@@ -337,8 +339,9 @@ SOURCES = [
     ("도구 릴리스", lambda: tool_releases()),
     ("Simon Willison", lambda: rss_source("https://simonwillison.net/atom/everything/", "Simon Willison", 15)),
     ("Latent Space", lambda: rss_source("https://www.latent.space/feed", "Latent Space", 5)),
-    ("GeekNews", lambda: rss_source("https://news.hada.io/rss/news", "GeekNews", 20, need_ai_words=True)),
+    ("GeekNews", lambda: rss_source("https://news.hada.io/rss/news", "GeekNews", 30)),  # AI 글 + IT 소식
     ("Hacker News", lambda: hn_search(["AI"], 10, 80)),
+    ("HN 화제", lambda: hn_search([""], 10, 300, ai_only=False)),  # IT 소식: AI 밖의 큰 화제글
     # 사람들의 활용법: 도구를 실제로 써 본 이야기
     ("HN 활용기", lambda: hn_search(["Claude Code", "Codex", "Cursor", "coding agent", "MCP", "prompt"], 8, 40)),
     ("Reddit", lambda: reddit_top(["ClaudeAI", "LocalLLaMA", "ChatGPTCoding"], 15)),
@@ -378,7 +381,9 @@ def fetch_body(a):
 
 NEWS_PROMPT = """너는 AI 소식을 한 명의 한국인 개발자를 위해 골라 주는 편집자다.
 이 개발자가 알고 싶은 것: 최신 AI 흐름, 새로 나온 모델, 새 도구·라이브러리(와 쓰는 도구의 새 버전), 바로 써먹을 수 있는 사용법·팁.
-관심 없는 것: 투자·인수·주가·실적, 소송, 정책·규제, 인사, 행사 홍보, AI와 무관한 글.
+그리고 AI가 아니어도 개발자에게 쓸모 있는 IT 소식: 새 도구·언어·프레임워크·브라우저, 웹 표준, 보안 사고·취약점,
+큰 서비스 장애와 원인 분석, 개발 실무·설계에 대한 좋은 글.
+관심 없는 것: 투자·인수·주가·실적, 소송, 정책·규제, 인사, 행사 홍보, 개발과 무관한 일반·과학·정치 기사.
 
 아래는 새로 모은 항목 목록이다. 형식: 번호. [출처] 제목 / 요약문(있을 때만)
 
@@ -391,7 +396,10 @@ NEWS_PROMPT = """너는 AI 소식을 한 명의 한국인 개발자를 위해 �
 - kind: 다음 중 하나 — """ + ", ".join(KINDS) + """
   (새 모델: 모델 출시·공개 / 도구·라이브러리: 새 도구, 라이브러리, SDK, 도구의 새 버전 /
    사용법·팁: 사람들이 AI 도구를 실제로 어떻게 쓰는지 — 따라 할 수 있는 활용법, 워크플로, 프롬프트, 설정, 사용기·경험담 /
-   업계 흐름: 그 밖의 큰 흐름·연구·발표)
+   업계 흐름: 그 밖의 AI 흐름·연구·발표 /
+   IT 소식: AI와 관련 없는 개발자 소식 — 위의 네 분류는 AI 관련일 때만 쓴다)
+  IT 소식은 개발자 여럿이 이야기할 만한 것만 남긴다. 개인 프로젝트 소개(Show HN 등)·짧은 의견글은 대개 false.
+  IT 소식의 importance는 보통 2~3, 쓰는 기술(웹·Python·Windows·GitHub)에 직접 영향이 있거나 큰 보안 사고면 4.
   Reddit·dev.to·HN의 사용기는 구체적인 방법이나 교훈이 있으면 남기고, 단순 질문·불평·밈·자랑은 뺀다.
   출처가 '블로그 ·'로 시작하는 국내 개인 블로그 글은 기본이 keep=false다. 하루 수십 건이 올라오고 대부분 검색 노출용이다.
   글쓴이가 직접 겪은 흔적(자기 프로젝트, 측정한 수치, 막힌 문제와 해결, 써 보고 내린 판단)이
@@ -604,7 +612,7 @@ def run():
         # rows가 최신순이라, 중요도로만 다시 정렬하면 같은 중요도 안에서는 최신이 먼저 온다
         todo = sorted((a for a in rows if a.get("ai") and not a.get("card")
                        and a.get("importance", 0) >= (KO_BLOG_CARD_MIN if a.get("origin") == "국내 블로그"
-                                                      else CARD_MIN_IMPORTANCE)
+                                                      or a.get("kind") == IT_KIND else CARD_MIN_IMPORTANCE)
                        and a.get("card_fail", 0) < CARD_MAX_TRIES),
                       key=lambda a: -a["importance"])[:max_cards]
         profile = deep.read_profile() if todo else ""
@@ -628,7 +636,7 @@ def run():
     brief = store.get("brief") if not first_run else None
     if ai_on and not ai_error and (not brief or brief.get("date") != today_s):
         day_ago = (now - dt.timedelta(hours=30 if not first_run else 24 * 7)).isoformat()
-        recent = sorted((a for a in rows if a.get("ai") and a["published"] >= day_ago),
+        recent = sorted((a for a in rows if a.get("ai") and a.get("kind") != IT_KIND and a["published"] >= day_ago),
                         key=lambda a: (-a.get("importance", 2), a["published"]))[:40]
         if len(recent) >= 4:
             try:

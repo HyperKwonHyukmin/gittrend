@@ -845,7 +845,7 @@
   // ------------------------------------------------------------ AI 레이더 (#/news)
 
   const NEWS_PAGE = 50;
-  const KIND_ICON = { "새 모델": "🆕", "도구·라이브러리": "📦", "사용법·팁": "💡", "업계 흐름": "📈" };
+  const KIND_ICON = { "새 모델": "🆕", "도구·라이브러리": "📦", "사용법·팁": "💡", "업계 흐름": "📈", "IT 소식": "🖥️" };
   let news = null;
   // home: 구역별로 추린 AI 홈 화면 / false면 kind로 거른 전체 목록
   // saved: 즐겨찾기한 기사만 보기
@@ -853,7 +853,7 @@
   const newsState = { home: true, saved: false, kind: "", sort: "latest", important: false, unread: !!store.get("gittrend:newsUnread", false), article: "", shown: NEWS_PAGE };
   const readNews = new Set(store.get("gittrend:read", []));
   // 주소에 쓰는 짧은 이름: #/news/models 등 (목록에 없는 종류는 이름을 그대로 인코딩)
-  const KIND_SLUG = { "새 모델": "models", "도구·라이브러리": "tools", "사용법·팁": "tips", "업계 흐름": "trends" };
+  const KIND_SLUG = { "새 모델": "models", "도구·라이브러리": "tools", "사용법·팁": "tips", "업계 흐름": "trends", "IT 소식": "it" };
   const kindHash = kind => kind ? `#/news/${KIND_SLUG[kind] || encodeURIComponent(kind)}` : "#/news/all";
   function kindOfSlug(slug) {
     const hit = Object.entries(KIND_SLUG).find(([, v]) => v === slug);
@@ -1096,6 +1096,7 @@
     const usage = pickTop(of("사용법·팁"), 5, used);
     const tools = toolUpdates(all, 6, used);
     const trends = pickTop(of("업계 흐름"), 3, used);
+    const it = pickTop(of("IT 소식"), 4, used);
     return `
       ${homeSec("⭐ 나를 위한 추천", "profile.md에 적어 둔 작업 기준으로 지금 쓸 만한 것 (읽으면 다음 것으로 바뀌어요)", list(mine, { showFit: true }))}
       ${homeSec("🔥 요즘 뜨는 AI 라이브러리", "GitHub Trending · HN · star 급상승에서 AI 관련만 골랐어요",
@@ -1103,7 +1104,8 @@
       ${homeSec("🆕 새 모델", "", list(models), { kind: "새 모델" })}
       ${homeSec("💡 사람들은 이렇게 써요", "Reddit · Hacker News · GeekNews · 블로그의 실제 사용기와 팁", list(usage), { kind: "사용법·팁" })}
       ${homeSec("📦 내 도구 업데이트", "Claude Code, Codex, Vite, Playwright 등 쓰는 도구의 새 버전", list(tools), { kind: "도구·라이브러리" })}
-      ${homeSec("📈 업계 흐름", "", list(trends), { kind: "업계 흐름" })}`;
+      ${homeSec("📈 업계 흐름", "", list(trends), { kind: "업계 흐름" })}
+      ${homeSec("🖥️ IT 소식", "GeekNews · Hacker News에서 AI 밖의 개발자 소식", list(it), { kind: "IT 소식" })}`;
   }
 
   function markRead(id, el) {
@@ -1288,7 +1290,7 @@
   //                 #/t/trend, #/t/new 는 마지막으로 고른 기간으로 바꿔 연다
   //   #/r/<저장소>  라이브러리 상세
   //   #/news        AI 홈 (추천 · 뜨는 AI 라이브러리 · 새 모델 · 활용법 · 도구 업데이트)
-  //   #/news/all    AI 소식 전체 목록, #/news/<models|tools|tips|trends> 종류별, #/news/saved 즐겨찾기
+  //   #/news/all    AI 소식 전체 목록, #/news/<models|tools|tips|trends|it> 종류별, #/news/saved 즐겨찾기
   //   #/n/<id>      AI 소식 하나 (펼친 카드)
   //   #/import/...  관심 목록 가져오기
 

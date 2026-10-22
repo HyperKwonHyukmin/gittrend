@@ -105,6 +105,14 @@ class NewsTests(unittest.TestCase):
         ai_card = self.run_news(files, [blog], judged)
         ai_card.assert_not_called()
 
+    def test_it_news_cards_need_higher_importance(self):
+        item = news.make("PHP security release", "https://php.test", "GeekNews", dt.datetime.now(collect.KST))
+        files = {}
+        judged = {1: {"keep": True, "dup": 0, "title_ko": "PHP 보안 릴리스", "summary": "s", "kind": news.IT_KIND, "importance": 3}}
+        ai_card = self.run_news(files, [item], judged)
+        ai_card.assert_not_called()
+        self.assertEqual(files[news.NEWS_PATH]["articles"][0]["kind"], "IT 소식")
+
     def test_old_format_news_is_replaced(self):
         old = {"id": "old1", "title": "투자 소식", "link": "https://example.test/o", "source": "x",
                "published": dt.datetime.now(collect.KST).isoformat(timespec="minutes"),

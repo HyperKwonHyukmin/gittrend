@@ -56,6 +56,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 | 💡 사람들은 이렇게 써요 | Reddit · Hacker News · GeekNews · dev.to · 블로그의 실제 사용기와 팁 |
 | 📦 내 도구 업데이트 | 따라가는 도구마다 최신 릴리스 하나 |
 | 📈 업계 흐름 | 그 밖의 큰 흐름 |
+| 🖥️ IT 소식 | AI가 아닌 개발자 소식: 새 도구·언어·브라우저, 보안 사고, 큰 장애, 실무 글 |
 
 각 구역의 **더 보기**나 위쪽 분류 칩을 누르면 그 분류의 전체 목록이 나오고, 검색하면 전체 목록에서 찾습니다.
 
@@ -68,7 +69,8 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 | 새 모델 | OpenRouter 모델 목록 (등록일·가격·컨텍스트 길이), Hugging Face 인기 모델 (양자화·변환본 제외) |
 | 공식 발표 | OpenAI, Google DeepMind, Google AI, Hugging Face 블로그 |
 | 도구 릴리스 | Claude Code, Codex CLI, OpenAI Python SDK, Ollama, Vite, React, Playwright, Capacitor의 GitHub 릴리스 (시험판 제외, `news.py`의 `TOOL_REPOS`에서 바꿀 수 있음) |
-| 사용법·흐름 | Simon Willison, Latent Space, GeekNews (AI 글만), Hacker News (AI 화제글) |
+| 사용법·흐름 | Simon Willison, Latent Space, GeekNews, Hacker News (AI 화제글) |
+| IT 소식 | GeekNews 전체 글과 Hacker News 화제글(3일 안 300점 이상 상위 10건) 중 AI가 아닌 것. 카드는 중요도 4 이상만, 오늘의 AI 레이더 요약에는 넣지 않음 |
 | 사람들의 활용법 | Reddit (r/ClaudeAI · r/LocalLLaMA · r/ChatGPTCoding 이번 주 인기), Hacker News (Claude Code · Codex · Cursor · MCP 사용기), dev.to, Lobsters |
 | 국내 | 회사 기술 블로그(토스 · 네이버 D2 · 카카오 · 당근 · 데보션)의 AI 글, 개인 블로그 사용기(카카오 블로그 검색: Claude Code · Codex · Cursor · MCP · 바이브 코딩 · Gemini CLI) |
 
