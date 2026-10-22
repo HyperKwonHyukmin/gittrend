@@ -97,6 +97,14 @@ class NewsTests(unittest.TestCase):
         with patch.object(collect, "chat_json", return_value={**reply, "fit_level": "매우 높음"}):
             self.assertEqual(news.ai_card(a, "", "")["fit_level"], "")
 
+    def test_blog_cards_need_higher_importance(self):
+        blog = news.make("Claude Code 한도 재 봤다", "https://a.tistory.com/1", "블로그 · t",
+                         dt.datetime.now(collect.KST), "", "국내 블로그")
+        files = {}
+        judged = {1: {"keep": True, "dup": 0, "title_ko": "한도 기록", "summary": "s", "kind": "사용법·팁", "importance": 3}}
+        ai_card = self.run_news(files, [blog], judged)
+        ai_card.assert_not_called()
+
     def test_old_format_news_is_replaced(self):
         old = {"id": "old1", "title": "투자 소식", "link": "https://example.test/o", "source": "x",
                "published": dt.datetime.now(collect.KST).isoformat(timespec="minutes"),
@@ -125,6 +133,8 @@ class KoBlogTests(unittest.TestCase):
             self.doc("주식 시장 오늘 흐름", "https://b.tistory.com/1"),               # 제목에 검색어 없음
             self.doc("2026-10-22 AI Developer Brief: Claude Code", "https://c.tistory.com/2"),  # 소식 모음
             self.doc("Claude Code 사용기", "https://d.tistory.com/3", contents="소정의 원고료를 받아 작성"),  # 협찬
+            self.doc("Claude Code 확장 추천 7가지", "https://e.tistory.com/4"),          # 목록 글
+            self.doc("Codex 사용법 완벽 가이드", "https://f.tistory.com/5"),             # 안내 글
         ]
         body = json.dumps({"documents": docs})
         with patch.dict(os.environ, {"KAKAO_REST_API_KEY": "k"}), \
