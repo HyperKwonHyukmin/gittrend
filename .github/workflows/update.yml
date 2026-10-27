@@ -4,7 +4,7 @@ name: Update trends
 on:
   workflow_dispatch:        # Actions 탭에서 수동 실행
   issues:
-    types: [opened]         # 페이지의 [심층 분석 요청] 버튼이 연 이슈 → 바로 분석
+    types: [opened]         # 페이지의 [심층 분석 요청]("deep: …")·[지금 업데이트]("update") 버튼이 연 이슈
 
 permissions:
   contents: write
@@ -18,10 +18,11 @@ concurrency:
 
 jobs:
   update:
-    # 이슈로 실행될 때는 저장소 주인이 연 "deep: owner/name" 이슈만 처리한다
+    # 이슈로 실행될 때는 저장소 주인이 연 "deep: owner/name"(심층 분석)·"update"(수집) 이슈만 처리한다
     if: >-
       github.event_name != 'issues' ||
-      (startsWith(github.event.issue.title, 'deep:') && github.event.issue.author_association == 'OWNER')
+      (github.event.issue.author_association == 'OWNER' &&
+       (startsWith(github.event.issue.title, 'deep:') || github.event.issue.title == 'update'))
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment:
@@ -37,7 +38,7 @@ jobs:
       # AI 정리가 중간에 멈춰도(키 오류, 크레딧 부족) 모은 데이터는 배포하고, 마지막에 실패로 표시한다
       - name: Collect and summarize
         id: collect
-        if: github.event_name != 'issues'
+        if: github.event_name != 'issues' || github.event.issue.title == 'update'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,7 +57,7 @@ jobs:
       # 심층 분석 요청 이슈만 처리 (수집은 하지 않음)
       - name: Deep analysis requests
         id: deep
-        if: github.event_name == 'issues'
+        if: github.event_name == 'issues' && startsWith(github.event.issue.title, 'deep:')
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -102,6 +103,15 @@ jobs:
           path: docs
       - id: deploy
         uses: actions/deploy-pages@v4
+
+      # [지금 업데이트] 이슈는 결과를 댓글로 남기고 닫는다(실패해도)
+      - name: Close update request
+        if: always() && github.event_name == 'issues' && github.event.issue.title == 'update'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ steps.collect.outcome == 'success' && job.status == 'success' && '업데이트를 마쳤습니다. 사이트에 반영됐어요.' || '업데이트 중 문제가 있었습니다. Actions 실행 기록을 확인해 주세요.' }}
+        run: gh issue close "${{ github.event.issue.number }}" --comment "$RESULT ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Report failure
         if: steps.collect.outcome == 'failure' || steps.deep.outcome == 'failure'

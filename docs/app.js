@@ -1477,8 +1477,23 @@
     .then(d => {
       data = d;
       const t = new Date(d.generated_at);
-      document.getElementById("updated").textContent =
+      const updated = document.getElementById("updated");
+      updated.textContent =
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      // 수집은 요청할 때만 한다(2026-10-27). 제목 "update" 이슈를 열면 Actions가 수집하고 이슈를 닫는다(저장소 주인만).
+      const base = repoUrl();
+      if (base) {
+        const body = "GitTrend 데이터를 지금 업데이트해 주세요.\n\n" +
+          "제목을 바꾸지 말고 그대로 [Create] 버튼을 누르면 됩니다.\n" +
+          "5~15분 뒤 끝나면 이 이슈에 댓글이 달리고 자동으로 닫혀요.";
+        const a = document.createElement("a");
+        a.className = "update-link";
+        a.href = `${base}/issues/new?title=update&body=${encodeURIComponent(body)}`;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = "지금 업데이트 ↗";
+        updated.append(" · ", a);
+      }
       const notes = [];
       if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(OpenAI 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
       setStatusNote("index", notes.join(" "));

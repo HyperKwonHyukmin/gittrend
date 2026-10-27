@@ -552,7 +552,8 @@ details.basic { margin-top: 14px; }
 details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2); padding: 8px 0; }
 
 .foot-links a { color: var(--ink-2); margin-left: 6px; }
-.foot-links a:hover { color: var(--accent-ink); }
+.foot-links a:hover, .update-link:hover { color: var(--accent-ink); }
+.update-link { color: var(--ink-2); }
 
 /* ---------- 모바일 */
 @media (max-width: 640px) {
