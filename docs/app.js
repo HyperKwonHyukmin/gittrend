@@ -1458,8 +1458,7 @@
     return newsLoad;
   }
 
-  // 수집은 하루 두 번(07·18시). 16시간 넘게 새 데이터가 없거나 AI 정리가 실패했으면 화면 위에 알린다.
-  const STALE_HOURS = 16;
+  // 수집은 요청할 때만 한다(2026-10-27, 정기 실행 없음). 그래서 오래된 데이터는 알리지 않고, AI 정리 실패만 화면 위에 알린다.
   const statusNotes = {};
   function setStatusNote(key, text) {
     statusNotes[key] = text;
@@ -1469,14 +1468,10 @@
     note.textContent = all.join(" ");
     note.hidden = !all.length;
   }
-  const hoursSince = iso => (Date.now() - new Date(iso).getTime()) / 3600_000;
 
   // 첫 화면 시작: index.json과 news.json을 동시에 받는다 (이 줄부터는 테스트가 잘라 내고 대신 넣음)
   loadNews().then(n => {
     if (n.load_failed) setStatusNote("news", "AI 소식 데이터(news.json)를 불러오지 못했어요.");
-    else if (n.generated_at && hoursSince(n.generated_at) > STALE_HOURS) {
-      setStatusNote("news", `AI 소식이 ${Math.floor(hoursSince(n.generated_at))}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
-    }
   });
   getJson("data/index.json")
     .then(d => {
@@ -1486,7 +1481,6 @@
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
       const notes = [];
       if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(OpenAI 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
-      if (hoursSince(d.generated_at) > STALE_HOURS) notes.push(`라이브러리 데이터가 ${Math.floor(hoursSince(d.generated_at))}시간 동안 갱신되지 않았어요. GitHub Actions의 Update trends 실행 기록을 확인해 주세요.`);
       setStatusNote("index", notes.join(" "));
       route();
     })

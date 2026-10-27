@@ -7,14 +7,14 @@ README뿐 아니라 패키지 설정, 대표 소스, docs/examples, 댓글 많�
 분석은 저장소마다 한 번만 하고 docs/data/repos/<저장소>.json 의 "deep"에 영구 보관한다.
 
 대상:
-  1) 자동: collect.py 실행 끝에 종합 주목 상위에서 DEEP_PER_RUN개 (기본 1)
+  1) 자동: collect.py 실행 끝에 종합 주목 상위에서 DEEP_PER_RUN개 (기본 0 = 끔, 2026-10-27)
   2) 요청: 저장소 주인이 연 GitHub 이슈 중 제목이 "deep: owner/name" 인 것
      (페이지의 [심층 분석 요청] 버튼이 이 이슈를 만든다. 분석 후 댓글을 달고 닫는다)
 
 환경변수:
   OPENAI_DEEP_MODEL       기본 gpt-5
   OPENAI_DEEP_REASONING   기본 medium
-  DEEP_PER_RUN            자동 분석 개수 (기본 1, 0이면 끔)
+  DEEP_PER_RUN            자동 분석 개수 (기본 0 = 끔)
   GITHUB_REPOSITORY       Actions가 넣어 준다 (owner/repo). 요청 이슈를 읽고 댓글을 다는 데 쓴다.
 
 따로 실행: python deep.py            → 요청 이슈만 처리

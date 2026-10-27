@@ -4,7 +4,7 @@ import io
 import json
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import collect
 import deep
@@ -253,6 +253,39 @@ class RequestTests(unittest.TestCase):
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/site"}), \
                 patch.object(gh, "api", return_value=issues):
             self.assertEqual(deep.pending_requests(gh), [(1, "acme/tool")])
+
+
+class UsageTests(unittest.TestCase):
+    """월 AI 토큰 상한(2026-10-27): 호출마다 usage를 누적하고, 상한에 닿으면 부르지 않는다."""
+
+    def setUp(self):
+        self.files = {}
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock", "AI_MONTHLY_TOKENS": "1000"}))
+        stack.enter_context(patch.object(collect, "read_json", side_effect=lambda p, d: self.files.get(p, d)))
+        stack.enter_context(patch.object(collect, "write_json", side_effect=lambda p, d: self.files.update({p: d})))
+
+    def reply(self, tokens):
+        body = json.dumps({"choices": [{"message": {"content": "{\"ok\": true}"}}],
+                           "usage": {"total_tokens": tokens}}).encode("utf-8")
+        resp = MagicMock()
+        resp.__enter__.return_value.read.return_value = body
+        return resp
+
+    def test_usage_is_added_per_call(self):
+        with patch.object(collect.urllib.request, "urlopen", side_effect=[self.reply(300), self.reply(200)]):
+            collect.chat_json("s", "u")
+            collect.chat_json("s", "u")
+        month = self.files[collect.AI_USAGE_PATH][collect._month_kst()]
+        self.assertEqual(month, {"tokens": 500, "calls": 2})
+
+    def test_stops_before_calling_when_limit_is_reached(self):
+        self.files[collect.AI_USAGE_PATH] = {collect._month_kst(): {"tokens": 1000, "calls": 3}}
+        with patch.object(collect.urllib.request, "urlopen") as urlopen:
+            with self.assertRaises(collect.AIFatal):
+                collect.chat_json("s", "u")
+            urlopen.assert_not_called()
 
 
 if __name__ == "__main__":

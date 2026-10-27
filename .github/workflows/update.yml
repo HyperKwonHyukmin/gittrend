@@ -1,9 +1,7 @@
 name: Update trends
 
+# 2026-10-27부터 정기 실행(cron) 없음: 사용자가 요청할 때만(Actions의 Run workflow, 심층 분석 이슈) 돈다. OpenAI 비용 때문.
 on:
-  schedule:
-    - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 레이더)
-    - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 새 모델·릴리스도 담기 위해)
   workflow_dispatch:        # Actions 탭에서 수동 실행
   issues:
     types: [opened]         # 페이지의 [심층 분석 요청] 버튼이 연 이슈 → 바로 분석

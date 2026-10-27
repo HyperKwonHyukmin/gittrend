@@ -29,7 +29,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 - 분석은 라이브러리마다 **한 번만** 하고 영구 보관합니다.
 
 언제 분석하나:
-1. **자동:** 실행마다 종합 주목 상위에서 `DEEP_PER_RUN`개(기본 1개, 하루 2개)
+1. **자동:** 실행마다 종합 주목 상위에서 `DEEP_PER_RUN`개. **기본 0(끔, 2026-10-27)** — 심층 분석 모델(`gpt-5`)이 가장 비싸서 요청한 것만 분석합니다
 2. **요청:** 상세 화면의 **[심층 분석 요청]** 버튼 → GitHub 이슈가 열리고 [Create]를 누르면 몇 분 안에 분석해서 반영합니다. 분석이 끝나면 이슈에 댓글이 달리고 자동으로 닫힙니다. 저장소 주인(본인)이 연 이슈만 처리합니다.
 
 `profile.md`에 하시는 작업을 적어 두면 "내 작업에 맞을까?"를 그 기준으로 판단합니다. 공개 저장소라 이 파일도 공개된다는 점에 주의하세요.
@@ -79,7 +79,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 
 - **판단:** 새 항목을 40건씩 묶어 한 번에 보내서 남길지(투자·소송·정책·홍보는 뺌), 같은 소식 묶기, 한국어 제목, 1~2문장 요약, 분류, 중요도(1~5)를 받습니다. 처리한 항목은 `data/news_seen.json`에 기록해 다시 보내지 않습니다.
 - **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준, 높음/보통/낮음)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 12)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
-- "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 하루 두 번(오전 7시, 오후 6시) 모으고, 최근 30일치를 보여줍니다.
+- "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 수집은 **요청할 때만**(Actions에서 Run workflow, 2026-10-27부터 정기 실행 없음) 하고, 최근 30일치를 보여줍니다.
 
 ## 구조
 
@@ -98,7 +98,8 @@ docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
 data/history.json             날짜별 star 기록 (60일 보관)
 data/meta.json                저장소 상세 정보 캐시
 data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 않기 위함)
-.github/workflows/update.yml  매일 오전 7시·오후 6시(한국시간) 자동 수집 → 배포
+data/ai_usage.json            월별 OpenAI 토큰·호출 수 (AI_MONTHLY_TOKENS 상한 판정)
+.github/workflows/update.yml  요청할 때 수집 → 배포 (Run workflow·심층 분석 이슈, 정기 실행 없음)
 ```
 
 ## PC에서 바로 써 보기
@@ -116,10 +117,10 @@ data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 �
 2. 저장소 **Settings → Secrets and variables → Actions**
    - Secrets 탭: `OPENAI_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
    - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
-     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 12)
+     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 0), `MAX_NEWS_CARDS` (기본 12), `AI_MONTHLY_TOKENS` (기본 300만, 한 달 토큰 상한 — `data/ai_usage.json`에 누적)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
-   끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로는 매일 오전 7시와 오후 6시에 자동으로 갱신됩니다.
+   끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로도 갱신하고 싶을 때 같은 버튼으로 실행합니다(자동 갱신 없음).
 5. 폰에서는 이 주소를 열고 "홈 화면에 추가"를 하면 앱처럼 쓸 수 있습니다.
 
 - 무료 계정의 GitHub Pages는 공개 페이지입니다. 검색엔진에는 노출되지 않도록 `noindex`를 넣어 두었습니다.

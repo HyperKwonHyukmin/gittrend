@@ -15,6 +15,7 @@ AI 정리는 저장소마다 한 번만 만들어 docs/data/repos/<저장소>.js
   OPENAI_BASE_URL   기본 https://api.openai.com/v1
   GITHUB_TOKEN      없어도 동작하지만, 있으면 상세 정보·릴리스·star 추적이 풍부해진다
   MAX_SUMMARIES     한 번 실행에 새로 정리할 최대 개수 (기본 60)
+  AI_MONTHLY_TOKENS 한국 시간 한 달 동안 쓸 수 있는 OpenAI 토큰 상한 (기본 300만, data/ai_usage.json에 누적)
 """
 
 import datetime as dt
@@ -39,6 +40,7 @@ SPARK_PATH = os.path.join(DOCS_DATA, "spark.json")
 STATE_DIR = os.path.join(ROOT, "data")
 HISTORY_PATH = os.path.join(STATE_DIR, "history.json")
 META_PATH = os.path.join(STATE_DIR, "meta.json")
+AI_USAGE_PATH = os.path.join(STATE_DIR, "ai_usage.json")
 
 KST = dt.timezone(dt.timedelta(hours=9))
 UA = "GitTrend/1.0 (+https://github.com)"
@@ -334,7 +336,39 @@ DIGEST_PROMPT = """너는 GitHub 트렌드를 한국 개발자에게 짧게 브�
 themes는 2~4개, 각 repos는 2~5개."""
 
 
+# 월 사용량: 호출이 끝날 때마다 응답의 usage.total_tokens를 data/ai_usage.json에 더한다(실행 끝에 커밋됨).
+# 다른 앱의 AI_MONTHLY_TOKENS와 같은 역할. 상한에 닿으면 남은 AI 정리를 멈추고 실행을 실패로 표시한다.
+_usage_lock = threading.Lock()
+
+
+def _month_kst():
+    return dt.datetime.now(KST).strftime("%Y-%m")
+
+
+def _monthly_limit():
+    try:
+        return int(os.environ.get("AI_MONTHLY_TOKENS") or 3_000_000)
+    except ValueError:
+        return 3_000_000
+
+
+def ai_month_used():
+    return int(read_json(AI_USAGE_PATH, {}).get(_month_kst(), {}).get("tokens", 0))
+
+
+def _add_usage(tokens):
+    with _usage_lock:
+        usage = read_json(AI_USAGE_PATH, {})
+        m = usage.setdefault(_month_kst(), {"tokens": 0, "calls": 0})
+        m["tokens"] = int(m.get("tokens", 0)) + int(tokens or 0)
+        m["calls"] = int(m.get("calls", 0)) + 1
+        write_json(AI_USAGE_PATH, usage)
+
+
 def chat_json(system, user):
+    used, limit = ai_month_used(), _monthly_limit()
+    if used >= limit:
+        raise AIFatal(f"이번 달 AI 토큰 상한에 닿았습니다 ({used:,} / {limit:,}). AI_MONTHLY_TOKENS로 조정합니다.")
     api_key = os.environ["OPENAI_API_KEY"]
     model = os.environ.get("OPENAI_MODEL") or "gpt-5-mini"
     body = {
@@ -355,6 +389,7 @@ def chat_json(system, user):
         try:
             with urllib.request.urlopen(req, timeout=240) as r:
                 d = json.loads(r.read().decode("utf-8"))
+            _add_usage((d.get("usage") or {}).get("total_tokens"))
             return json.loads(d["choices"][0]["message"]["content"])
         except urllib.error.HTTPError as e:
             msg = e.read().decode("utf-8", errors="replace")[:300]
@@ -766,7 +801,7 @@ def main():
 
     # 심층 분석 (deep.py): 요청 이슈 + 종합 주목 상위에서 자동으로 몇 개
     import deep
-    per_run = int(os.environ.get("DEEP_PER_RUN") or 1)
+    per_run = int(os.environ.get("DEEP_PER_RUN") or 0)  # 기본은 자동 심층 분석 끔(2026-10-27, gpt-5라 가장 비쌈). 이슈 요청은 그대로
     auto = [k for k in hot if not details[k].get("deep")][:per_run] if not ai_error else []
     hn_urls = {k: r["hn"]["hn_url"] for k, r in repos.items() if r.get("hn")}
     try:
