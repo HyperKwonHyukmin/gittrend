@@ -1,20 +1,20 @@
 """GitTrend 심층 분석.
 
-기본 정리(collect.py, 저렴한 모델)보다 깊이 있는 분석을 더 높은 모델로 만든다.
+기본 정리(collect.py)보다 많은 자료를 더 깊게 읽어 분석한다.
 README뿐 아니라 패키지 설정, 대표 소스, docs/examples, 댓글 많은 이슈, Hacker News 댓글, 릴리스를
 함께 읽혀서 주요 API, 동작 원리, 실제 사용 방식, 커뮤니티 반응, 내 작업과의 적합도를 정리한다.
 
 분석은 저장소마다 한 번만 하고 docs/data/repos/<저장소>.json 의 "deep"에 영구 보관한다.
 
 대상:
-  1) 자동: collect.py 실행 끝에 종합 주목 상위에서 DEEP_PER_RUN개 (기본 0 = 끔, 2026-10-27)
+  1) 자동: collect.py 실행 끝에 종합 주목 상위에서 DEEP_PER_RUN개 (기본 1, 0이면 끔)
   2) 요청: 저장소 주인이 연 GitHub 이슈 중 제목이 "deep: owner/name" 인 것
      (페이지의 [심층 분석 요청] 버튼이 이 이슈를 만든다. 분석 후 댓글을 달고 닫는다)
 
 환경변수:
-  OPENAI_DEEP_MODEL       기본 gpt-5
-  OPENAI_DEEP_REASONING   기본 medium
-  DEEP_PER_RUN            자동 분석 개수 (기본 0 = 끔)
+  ANTHROPIC_DEEP_MODEL    기본 claude-opus-5-5
+  ANTHROPIC_DEEP_EFFORT   기본 high
+  DEEP_PER_RUN            자동 분석 개수 (기본 1, 0이면 끔)
   GITHUB_REPOSITORY       Actions가 넣어 준다 (owner/repo). 요청 이슈를 읽고 댓글을 다는 데 쓴다.
 
 따로 실행: python deep.py            → 요청 이슈만 처리
@@ -58,7 +58,7 @@ DEEP_PROMPT = """너는 오픈소스를 실무에 도입할지 판단해 주는 
   "how_it_works": "동작 원리와 구조 3~6문장 (핵심 개념, 아키텍처, 의존하는 것)",
   "key_apis": [
     {"name": "함수/클래스/메서드/명령 이름", "kind": "함수|클래스|메서드|CLI 명령|설정|컴포넌트|훅|HTTP API",
-     "signature": "시그니처나 호출 형태 (모르면 빈 문자열)", "desc": "무엇을 하는지 1~2문장", "example": "짧은 사용 코드 (선택)"}
+     "signature": "시그니처나 호출 형태 (모르면 빈 문자열)", "desc": "무엇을 하는지 1~2문장", "example": "짧은 사용 코드 (없으면 빈 문자열)"}
   ],
   "capabilities": [{"title": "기능 이름", "desc": "구체적으로 무엇을 어떻게 해 주는지 2~3문장"}],
   "usage_patterns": [{"title": "사용 방식", "desc": "사람들이 실제로 어떻게 쓰는지", "evidence": "근거"}],
@@ -74,6 +74,21 @@ DEEP_PROMPT = """너는 오픈소스를 실무에 도입할지 판단해 주는 
   "watch_out": ["도입 전에 꼭 확인할 점 (라이선스, 유료 API 필요, 지원 OS, 성능, 보안 등)"]
 }
 key_apis는 5~10개, capabilities는 4~8개, usage_patterns는 3~5개, alternatives는 2~4개로 쓴다."""
+
+_S, _A = core.STR, core.arr
+DEEP_SCHEMA = core.obj({
+    "verdict": _S,
+    "fit": core.obj({"level": _S, "reason": _S, "use_in_my_work": _A(_S), "skip_if": _A(_S)}),
+    "how_it_works": _S,
+    "key_apis": _A(core.obj({"name": _S, "kind": _S, "signature": _S, "desc": _S, "example": _S})),
+    "capabilities": _A(core.obj({"title": _S, "desc": _S})),
+    "usage_patterns": _A(core.obj({"title": _S, "desc": _S, "evidence": _S})),
+    "community": core.obj({"sentiment": _S, "praise": _A(_S), "complaints": _A(_S), "common_questions": _A(_S)}),
+    "maturity": core.obj({"stage": _S, "notes": _S}),
+    "alternatives": _A(core.obj({"name": _S, "choose_when": _S})),
+    "getting_started": core.obj({"install": _S, "code_lang": _S, "code": _S, "steps": _A(_S)}),
+    "watch_out": _A(_S),
+})
 
 
 def log(*a):
@@ -134,7 +149,7 @@ def gather(gh, full, hn_url=""):
     }
     parts.append("## 저장소 정보\n" + json.dumps(info, ensure_ascii=False, indent=1))
 
-    readme = core.clean_readme(core.fetch_readme(gh, full), limit=25000)
+    readme = core.clean_readme(core.fetch_readme(gh, full), limit=60000)
     parts.append("## README\n" + (readme or "(없음)"))
 
     tree = gh.api(f"/repos/{full}/git/trees/{branch}?recursive=1") or {}
@@ -144,13 +159,13 @@ def gather(gh, full, hn_url=""):
         parts.append(f"## 파일 구조 (파일 {len(paths)}개)\n최상위: " + ", ".join(top[:60]))
         manifests, docs, examples, entries = pick_files(paths)
         for p in manifests:
-            parts.append(f"## 패키지 설정: {p}\n" + raw_file(full, branch, p, 4000))
+            parts.append(f"## 패키지 설정: {p}\n" + raw_file(full, branch, p, 8000))
         for p in entries:
-            parts.append(f"## 대표 소스: {p}\n" + raw_file(full, branch, p, 5000))
+            parts.append(f"## 대표 소스: {p}\n" + raw_file(full, branch, p, 15000))
         for p in docs:
-            parts.append(f"## 문서: {p}\n" + raw_file(full, branch, p, 6000))
+            parts.append(f"## 문서: {p}\n" + raw_file(full, branch, p, 15000))
         for p in examples:
-            parts.append(f"## 예제: {p}\n" + raw_file(full, branch, p, 3000))
+            parts.append(f"## 예제: {p}\n" + raw_file(full, branch, p, 8000))
 
     # 이슈 목록 API는 PR이 섞여 나와서(댓글 많은 순이면 PR만 나오기도 함) 검색 API로 이슈만 받는다
     found = gh.api(f"/search/issues?q=repo:{full}+is:issue&sort=comments&order=desc&per_page=20") or {}
@@ -176,10 +191,10 @@ def gather(gh, full, hn_url=""):
     if m:
         try:
             body, _ = core.http_get(f"https://hn.algolia.com/api/v1/items/{m.group(1)}")
-            kids = [k for k in json.loads(body).get("children", []) if k.get("text")][:12]
+            kids = [k for k in json.loads(body).get("children", []) if k.get("text")][:20]
             if kids:
                 parts.append("## Hacker News 댓글 (사용자 반응)\n" + "\n".join(
-                    "- " + re.sub(r"\s+", " ", core.strip_tags(k["text"]))[:400] for k in kids))
+                    "- " + re.sub(r"\s+", " ", core.strip_tags(k["text"]))[:800] for k in kids))
         except Exception:  # noqa: BLE001
             pass
 
@@ -249,8 +264,8 @@ def read_profile():
 def deep_env():
     """심층 분석용 모델로 chat_json을 부르기 위해 환경변수를 잠시 바꾼다."""
     return {
-        "OPENAI_MODEL": os.environ.get("OPENAI_DEEP_MODEL") or "gpt-5",
-        "OPENAI_REASONING": os.environ.get("OPENAI_DEEP_REASONING") or "medium",
+        "ANTHROPIC_MODEL": os.environ.get("ANTHROPIC_DEEP_MODEL") or core.DEFAULT_MODEL,
+        "ANTHROPIC_EFFORT": os.environ.get("ANTHROPIC_DEEP_EFFORT") or "high",
     }
 
 
@@ -258,18 +273,18 @@ def analyze(gh, full, hn_url=""):
     meta, material = gather(gh, full, hn_url)
     profile = read_profile()
     user = ("## 사용자 작업 프로필\n" + (profile or "(비어 있음)") + "\n\n" + material)
-    saved = {k: os.environ.get(k) for k in ("OPENAI_MODEL", "OPENAI_REASONING")}
+    saved = {k: os.environ.get(k) for k in ("ANTHROPIC_MODEL", "ANTHROPIC_EFFORT")}
     env = deep_env()
     os.environ.update(env)
     try:
-        result = normalize_deep(core.chat_json(DEEP_PROMPT, user))
+        result = normalize_deep(core.chat_json(DEEP_PROMPT, user, DEEP_SCHEMA))
     finally:
         for k, v in saved.items():
             if v is None:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
-    return meta, {"deep": result, "deep_model": env["OPENAI_MODEL"],
+    return meta, {"deep": result, "deep_model": env["ANTHROPIC_MODEL"],
                   "deep_at": core.today_kst().isoformat(), "deep_profile": bool(profile)}
 
 
@@ -372,7 +387,7 @@ def ensure_catalog_entry(key, meta):
 
 def run(gh=None, auto_keys=(), hn_urls=None):
     """요청 이슈 + 자동 대상을 분석한다. AI 치명 오류 메시지를 돌려준다."""
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         return ""
     gh = gh or core.GitHub(os.environ.get("GITHUB_TOKEN") or "")
     hn_urls = hn_urls or {}

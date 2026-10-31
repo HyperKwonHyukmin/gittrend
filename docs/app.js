@@ -555,7 +555,7 @@
     if (!s) {
       return `<div class="no-ai">아직 AI 정리가 없어요. ${data.ai_enabled
         ? "다음 업데이트 때 정리될 예정이에요."
-        : "OpenAI API 키를 설정하면 사용법과 특징을 정리해 드려요."}
+        : "Claude API 키를 설정하면 사용법과 특징을 정리해 드려요."}
         <br>그동안은 <a href="https://github.com/${esc(r.full_name)}#readme" target="_blank" rel="noopener">GitHub README</a>를 확인해 주세요.</div>`;
     }
     const qs = s.quickstart || {};
@@ -1495,7 +1495,7 @@
         updated.append(" · ", a);
       }
       const notes = [];
-      if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(OpenAI 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
+      if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(Claude API 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
       setStatusNote("index", notes.join(" "));
       route();
     })

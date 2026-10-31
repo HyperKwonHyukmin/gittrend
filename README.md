@@ -1,6 +1,6 @@
 # GitTrend
 
-GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **무엇인지 · 왜 뜨는지 · 주요 특징 · 사용법 · 비슷한 도구 · 주의점**을 한국어로 정리해 주는 대시보드입니다. 처음 화면인 **AI 홈**에서는 나를 위한 추천, 뜨는 AI 라이브러리, 새 모델, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에서 보고 페이지 안에서 바로 읽을 수 있습니다. PC와 모바일 모두에서 볼 수 있습니다.
+GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가 **무엇인지 · 왜 뜨는지 · 주요 특징 · 사용법 · 비슷한 도구 · 주의점**을 한국어로 정리해 주는 대시보드입니다. 처음 화면인 **AI 홈**에서는 나를 위한 추천, 뜨는 AI 라이브러리, 새 모델, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에서 보고 페이지 안에서 바로 읽을 수 있습니다. PC와 모바일 모두에서 볼 수 있습니다.
 
 ## 탭과 데이터 출처
 
@@ -19,22 +19,22 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 
 저장소마다 AI 정리를 **딱 한 번** 만들어 `docs/data/repos/<저장소>.json`에 영구 보관합니다. 순위에서 빠졌다가 다시 올라와도 저장된 정리를 그대로 쓰므로, API는 처음 보는 저장소에만 쓰입니다. 하루 사용량은 대체로 "그날 새로 뜬 저장소 수 + 트렌드 요약 1회"입니다.
 
-## 심층 분석 (더 높은 모델)
+## 심층 분석
 
-기본 정리는 저렴한 모델(`gpt-5-mini`)로 모든 라이브러리에 붙이고, 그 위에 **심층 분석**을 더합니다.
+기본 정리는 `claude-opus-5-5`(추론 `medium`)로 모든 라이브러리에 붙이고, 그 위에 **심층 분석**을 더합니다.
 
 - AI가 README뿐 아니라 **패키지 설정, 대표 소스, docs·examples, 댓글 많은 이슈, Hacker News 댓글, 최근 릴리스**까지 읽습니다.
 - 정리하는 내용: 결론, **내 작업에 맞을까?**(`profile.md` 기준), 동작 원리, **주요 API·메서드**, 할 수 있는 것, **사람들은 이렇게 써요**, 커뮤니티 반응(좋은 점·불만·자주 묻는 질문), 성숙도, 대안과 비교, 시작하기, 도입 전 확인할 점
-- 모델: `OPENAI_DEEP_MODEL` (기본 `gpt-5`, 추론 `medium`)
+- 모델: `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`, 추론 `high`)
 - 분석은 라이브러리마다 **한 번만** 하고 영구 보관합니다.
 
 언제 분석하나:
-1. **자동:** 실행마다 종합 주목 상위에서 `DEEP_PER_RUN`개. **기본 0(끔, 2026-10-27)** — 심층 분석 모델(`gpt-5`)이 가장 비싸서 요청한 것만 분석합니다
+1. **자동:** 실행마다 종합 주목 상위에서 `DEEP_PER_RUN`개. **기본 1**(0이면 요청한 것만 분석)
 2. **요청:** 상세 화면의 **[심층 분석 요청]** 버튼 → GitHub 이슈가 열리고 [Create]를 누르면 몇 분 안에 분석해서 반영합니다. 분석이 끝나면 이슈에 댓글이 달리고 자동으로 닫힙니다. 저장소 주인(본인)이 연 이슈만 처리합니다.
 
 `profile.md`에 하시는 작업을 적어 두면 "내 작업에 맞을까?"를 그 기준으로 판단합니다. 공개 저장소라 이 파일도 공개된다는 점에 주의하세요.
 
-비용(대략): 한 건에 입력 1~2만 토큰 + 출력·추론 수천 토큰이라 `gpt-5` 기준 **한 건에 100~150원 안팎**으로 예상합니다. 자동 하루 2건이면 한 달 몇천 원 수준이고, 요청한 만큼 더해집니다. 정확한 금액은 페이지 하단 **OpenAI Usage → 사용량** 링크에서 확인하세요.
+비용(대략): 한 건에 입력 2~4만 토큰 + 출력·추론 1만 토큰 안팎이라 `claude-opus-5-5` 기준 한 건에 $0.3~0.4쯤으로 예상합니다.
 
 ## 관심 목록과 추천
 
@@ -79,7 +79,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(OpenAI)가 **�
 
 - **판단:** 새 항목을 40건씩 묶어 한 번에 보내서 남길지(투자·소송·정책·홍보는 뺌), 같은 소식 묶기, 한국어 제목, 1~2문장 요약, 분류, 중요도(1~5)를 받습니다. 처리한 항목은 `data/news_seen.json`에 기록해 다시 보내지 않습니다.
 - **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준, 높음/보통/낮음)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 12)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
-- "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 수집은 **요청할 때만**(2026-10-27부터 정기 실행 없음) 합니다: 화면 아래 "마지막 업데이트" 옆 **[지금 업데이트]**(제목 `update` 이슈를 열면 수집 후 댓글 달고 닫힘, 저장소 주인만) 또는 Actions의 Run workflow. 최근 30일치를 보여줍니다.
+- "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 수집은 **매일 2번**(한국시간 오전 7시·오후 6시) 돌고, 그 밖에도 요청할 수 있습니다: 화면 아래 "마지막 업데이트" 옆 **[지금 업데이트]**(제목 `update` 이슈를 열면 수집 후 댓글 달고 닫힘, 저장소 주인만) 또는 Actions의 Run workflow. 최근 30일치를 보여줍니다.
 
 ## 구조
 
@@ -98,13 +98,13 @@ docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
 data/history.json             날짜별 star 기록 (60일 보관)
 data/meta.json                저장소 상세 정보 캐시
 data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 않기 위함)
-data/ai_usage.json            월별 OpenAI 토큰·호출 수 (AI_MONTHLY_TOKENS 상한 판정)
-.github/workflows/update.yml  요청할 때 수집 → 배포 (Run workflow·심층 분석 이슈, 정기 실행 없음)
+data/ai_usage.json            월별 Claude 토큰·호출 수 (AI_MONTHLY_TOKENS 상한 판정)
+.github/workflows/update.yml  매일 2번 수집 → 배포 (그 밖에 Run workflow·심층 분석 이슈)
 ```
 
 ## PC에서 바로 써 보기
 
-1. `.env.example`을 `.env`로 복사하고 `OPENAI_API_KEY`를 넣습니다.
+1. `.env.example`을 `.env`로 복사하고 `ANTHROPIC_API_KEY`를 넣습니다.
    `GITHUB_TOKEN`은 선택 사항입니다. 넣으면 상세 정보(라이선스, 생성일, 최신 릴리스)와 급상승 추적이 풍부해집니다. github.com/settings/tokens 에서 권한 없이 발급하면 됩니다.
 2. `run-local.bat`을 더블클릭합니다. 수집이 끝나면 http://localhost:5190 이 열립니다.
    수집 없이 화면만 다시 열 때는 `serve.bat`을 씁니다.
@@ -115,9 +115,9 @@ data/ai_usage.json            월별 OpenAI 토큰·호출 수 (AI_MONTHLY_TOKEN
 
 1. GitHub에 **Public** 저장소를 만들고 이 폴더를 올립니다. (`.env`는 `.gitignore`에 있어서 올라가지 않습니다.)
 2. 저장소 **Settings → Secrets and variables → Actions**
-   - Secrets 탭: `OPENAI_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
-   - Variables 탭 (선택): `OPENAI_MODEL` (기본 `gpt-5-mini`), `OPENAI_REASONING` (기본 `low`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
-     `OPENAI_DEEP_MODEL` (기본 `gpt-5`), `OPENAI_DEEP_REASONING` (기본 `medium`), `DEEP_PER_RUN` (기본 0), `MAX_NEWS_CARDS` (기본 12), `AI_MONTHLY_TOKENS` (기본 300만, 한 달 토큰 상한 — `data/ai_usage.json`에 누적)
+   - Secrets 탭: `ANTHROPIC_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
+   - Variables 탭 (선택): `ANTHROPIC_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_EFFORT` (기본 `medium`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
+     `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_DEEP_EFFORT` (기본 `high`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 30), `AI_MONTHLY_TOKENS` (기본 300만, 한 달 토큰 상한 — `data/ai_usage.json`에 누적)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
    끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로도 갱신하고 싶을 때 같은 버튼으로 실행합니다(자동 갱신 없음).
@@ -129,8 +129,8 @@ data/ai_usage.json            월별 OpenAI 토큰·호출 수 (AI_MONTHLY_TOKEN
 
 ## 비용
 
-사용량과 남은 잔액은 페이지 맨 아래 **OpenAI Usage** 링크(사용량 · 남은 잔액 · 사용 한도)에서 바로 확인할 수 있습니다. (OpenAI 로그인 필요)
+사용량과 남은 잔액은 페이지 맨 아래 **Claude API** 링크(사용량 · 남은 잔액 · 사용 한도)에서 바로 확인할 수 있습니다. (Claude Console 로그인 필요)
 
 - GitHub Actions, Pages: 공개 저장소면 무료
-- OpenAI: 저장소 하나 정리에 입력 약 5천 토큰. 첫 실행은 최대 60개, 그 뒤로는 새로 뜬 저장소만 정리합니다.
-  AI 레이더는 판단을 40건씩 묶어 보내고(하루 2~4번), 카드는 실행마다 최대 12건(한 건에 입력 약 3~5천 토큰)만 만듭니다. platform.openai.com의 **Limits**에서 월 사용 한도를 걸어 두기를 권장합니다.
+- Claude API: 저장소 하나 정리에 입력 약 1만 토큰. 첫 실행은 최대 60개, 그 뒤로는 새로 뜬 저장소만 정리합니다.
+  AI 레이더는 판단을 40건씩 묶어 보내고(하루 2~4번), 카드는 실행마다 최대 30건(한 건에 입력 약 5천 토큰)만 만듭니다. Claude Console의 **Billing**에서 월 사용 한도를 걸어 두기를 권장합니다.

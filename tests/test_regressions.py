@@ -4,11 +4,77 @@ import io
 import json
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import collect
 import deep
 import news
+
+
+class FakeStream:
+    def __init__(self, message):
+        self.message = message
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def get_final_message(self):
+        return self.message
+
+
+def claude_reply(text, stop_reason="end_turn"):
+    usage = SimpleNamespace(input_tokens=10, output_tokens=5, cache_creation_input_tokens=None,
+                            cache_read_input_tokens=3)
+    content = [SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=text)]
+    return SimpleNamespace(stop_reason=stop_reason, usage=usage, content=content)
+
+
+class ChatJsonTests(unittest.TestCase):
+    def call(self, stream=None, error=None):
+        client = MagicMock()
+        client.beta.messages.stream.side_effect = error
+        client.beta.messages.stream.return_value = stream
+        with patch.object(collect.anthropic, "Anthropic", return_value=client),              patch.object(collect, "ai_month_used", return_value=0),              patch.object(collect, "_add_usage") as add,              patch.dict(os.environ, {"ANTHROPIC_API_KEY": "mock"}):
+            result = collect.chat_json("sys", "user", collect.DIGEST_SCHEMA)
+        return result, client.beta.messages.stream.call_args.kwargs, add
+
+    def test_sends_schema_and_fallback_and_reads_text_block(self):
+        result, sent, add = self.call(FakeStream(claude_reply('{"headline": "h"}')))
+        self.assertEqual(result, {"headline": "h"})
+        self.assertEqual(sent["model"], collect.DEFAULT_MODEL)
+        self.assertEqual(sent["fallbacks"], "default")
+        self.assertEqual(sent["output_config"]["format"]["schema"], collect.DIGEST_SCHEMA)
+        add.assert_called_once_with(18)
+
+    def test_refusal_and_cutoff_are_errors_not_data(self):
+        for reason in ("refusal", "max_tokens"):
+            with self.assertRaises(RuntimeError):
+                self.call(FakeStream(claude_reply('{"headline":', reason)))
+
+    def test_bad_key_and_empty_credit_stop_the_run(self):
+        response = MagicMock(status_code=401, headers={})
+        with self.assertRaises(collect.AIFatal):
+            self.call(error=collect.anthropic.AuthenticationError("bad", response=response, body=None))
+        response = MagicMock(status_code=400, headers={})
+        with self.assertRaises(collect.AIFatal):
+            self.call(error=collect.anthropic.BadRequestError("Your credit balance is too low", response=response, body=None))
+
+    def test_all_schemas_are_strict(self):
+        def walk(s):
+            if s.get("type") == "object":
+                self.assertIs(s["additionalProperties"], False)
+                self.assertEqual(sorted(s["required"]), sorted(s["properties"]))
+                for v in s["properties"].values():
+                    walk(v)
+            elif s.get("type") == "array":
+                walk(s["items"])
+        for s in (collect.SUMMARY_SCHEMA, collect.DIGEST_SCHEMA, news.NEWS_SCHEMA, news.CARD_SCHEMA,
+                  news.BRIEF_SCHEMA, deep.DEEP_SCHEMA):
+            walk(s)
 
 
 class NewsTests(unittest.TestCase):
@@ -19,7 +85,7 @@ class NewsTests(unittest.TestCase):
         result = {1: {"keep": True, "dup": 0, "title_ko": "AI launch",
                       "summary": "test", "kind": "업계 흐름", "importance": 2}}
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock"}))
+            stack.enter_context(patch.dict(os.environ, {"ANTHROPIC_API_KEY": "mock"}))
             stack.enter_context(patch.object(news, "SOURCES", [("test", lambda: [article])]))
             stack.enter_context(patch.object(collect, "read_json",
                                             side_effect=lambda p, d: files.get(p, d)))
@@ -40,7 +106,7 @@ class NewsTests(unittest.TestCase):
         article = news.make("Unrelated launch", "https://example.test", "test",
                             dt.datetime.now(collect.KST))
         files = {}
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "mock"}), \
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "mock"}), \
                 patch.object(news, "SOURCES", [("test", lambda: [article])]), \
                 patch.object(collect, "read_json", side_effect=lambda p, d: d), \
                 patch.object(news, "ai_judge", return_value={1: {"keep": False}}), \
@@ -53,7 +119,7 @@ class NewsTests(unittest.TestCase):
 
     def run_news(self, files, articles, judge_result=None, card=None):
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock"}))
+            stack.enter_context(patch.dict(os.environ, {"ANTHROPIC_API_KEY": "mock"}))
             stack.enter_context(patch.object(news, "SOURCES", [("test", lambda: articles)]))
             stack.enter_context(patch.object(collect, "read_json", side_effect=lambda p, d: files.get(p, d)))
             for name in ("write_json", "write_json_lines"):
@@ -186,7 +252,7 @@ class CollectorTests(unittest.TestCase):
 
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {
-                "GITHUB_TOKEN": "mock", "GH_TOKEN": "", "OPENAI_API_KEY": "mock",
+                "GITHUB_TOKEN": "mock", "GH_TOKEN": "", "ANTHROPIC_API_KEY": "mock",
                 "DEEP_PER_RUN": "0", "MAX_SUMMARIES": "60",
             }))
             stack.enter_context(patch.object(collect, "load_dotenv"))
@@ -262,30 +328,35 @@ class UsageTests(unittest.TestCase):
         self.files = {}
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
-        stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "mock", "AI_MONTHLY_TOKENS": "1000"}))
+        stack.enter_context(patch.dict(os.environ, {"ANTHROPIC_API_KEY": "mock", "AI_MONTHLY_TOKENS": "1000"}))
         stack.enter_context(patch.object(collect, "read_json", side_effect=lambda p, d: self.files.get(p, d)))
         stack.enter_context(patch.object(collect, "write_json", side_effect=lambda p, d: self.files.update({p: d})))
 
-    def reply(self, tokens):
-        body = json.dumps({"choices": [{"message": {"content": "{\"ok\": true}"}}],
-                           "usage": {"total_tokens": tokens}}).encode("utf-8")
-        resp = MagicMock()
-        resp.__enter__.return_value.read.return_value = body
-        return resp
+    def client(self, *tokens):
+        client = MagicMock()
+        replies = []
+        for t in tokens:
+            reply = claude_reply('{"ok": true}')
+            reply.usage.input_tokens, reply.usage.output_tokens, reply.usage.cache_read_input_tokens = t, 0, 0
+            replies.append(FakeStream(reply))
+        client.beta.messages.stream.side_effect = replies
+        return patch.object(collect.anthropic, "Anthropic", return_value=client), client
 
     def test_usage_is_added_per_call(self):
-        with patch.object(collect.urllib.request, "urlopen", side_effect=[self.reply(300), self.reply(200)]):
-            collect.chat_json("s", "u")
-            collect.chat_json("s", "u")
+        patcher, _ = self.client(300, 200)
+        with patcher:
+            collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
+            collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
         month = self.files[collect.AI_USAGE_PATH][collect._month_kst()]
         self.assertEqual(month, {"tokens": 500, "calls": 2})
 
     def test_stops_before_calling_when_limit_is_reached(self):
         self.files[collect.AI_USAGE_PATH] = {collect._month_kst(): {"tokens": 1000, "calls": 3}}
-        with patch.object(collect.urllib.request, "urlopen") as urlopen:
+        patcher, client = self.client()
+        with patcher:
             with self.assertRaises(collect.AIFatal):
-                collect.chat_json("s", "u")
-            urlopen.assert_not_called()
+                collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
+        client.beta.messages.stream.assert_not_called()
 
 
 if __name__ == "__main__":

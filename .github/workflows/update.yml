@@ -1,7 +1,10 @@
 name: Update trends
 
-# 2026-10-27부터 정기 실행(cron) 없음: 사용자가 요청할 때만(Actions의 Run workflow, 심층 분석 이슈) 돈다. OpenAI 비용 때문.
+# 수집 범위가 72시간이라 정기 실행이 없으면 소식을 놓친다. 2026-10-27 비용 때문에 껐다가 2026-10-31 월 API 크레딧으로 되살렸다.
 on:
+  schedule:
+    - cron: "0 22 * * *"   # 매일 한국시간 오전 7시 (라이브러리 + AI 레이더)
+    - cron: "0 9 * * *"    # 매일 한국시간 오후 6시 (낮 동안의 새 모델·릴리스도 담기 위해)
   workflow_dispatch:        # Actions 탭에서 수동 실행
   issues:
     types: [opened]         # 페이지의 [심층 분석 요청]("deep: …")·[지금 업데이트]("update") 버튼이 연 이슈
@@ -29,11 +32,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # 줄 서서 기다린 실행도 앞 실행이 올린 데이터 위에서 시작하게 항상 최신 main을 받는다(이벤트 시점 커밋이면 데이터 커밋이 충돌)
       - uses: actions/checkout@v5
+        with:
+          ref: main
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - run: pip install -r requirements.txt
 
       # AI 정리가 중간에 멈춰도(키 오류, 크레딧 부족) 모은 데이터는 배포하고, 마지막에 실패로 표시한다
       - name: Collect and summarize
@@ -42,11 +50,11 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          OPENAI_REASONING: ${{ vars.OPENAI_REASONING }}
-          OPENAI_DEEP_MODEL: ${{ vars.OPENAI_DEEP_MODEL }}
-          OPENAI_DEEP_REASONING: ${{ vars.OPENAI_DEEP_REASONING }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          ANTHROPIC_EFFORT: ${{ vars.ANTHROPIC_EFFORT }}
+          ANTHROPIC_DEEP_MODEL: ${{ vars.ANTHROPIC_DEEP_MODEL }}
+          ANTHROPIC_DEEP_EFFORT: ${{ vars.ANTHROPIC_DEEP_EFFORT }}
           DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
@@ -61,11 +69,11 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          OPENAI_REASONING: ${{ vars.OPENAI_REASONING }}
-          OPENAI_DEEP_MODEL: ${{ vars.OPENAI_DEEP_MODEL }}
-          OPENAI_DEEP_REASONING: ${{ vars.OPENAI_DEEP_REASONING }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          ANTHROPIC_EFFORT: ${{ vars.ANTHROPIC_EFFORT }}
+          ANTHROPIC_DEEP_MODEL: ${{ vars.ANTHROPIC_DEEP_MODEL }}
+          ANTHROPIC_DEEP_EFFORT: ${{ vars.ANTHROPIC_DEEP_EFFORT }}
           DEEP_PER_RUN: ${{ vars.DEEP_PER_RUN }}
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}

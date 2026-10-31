@@ -1,7 +1,7 @@
 """GitTrend 수집기.
 
 GitHub Trending / GitHub 검색(신규 저장소) / Hacker News / 자체 star 기록을 모아
-docs/data/ 아래에 대시보드용 JSON을 만들고, OpenAI API로 저장소별 한국어 정리를 붙인다.
+docs/data/ 아래에 대시보드용 JSON을 만들고, Claude API로 저장소별 한국어 정리를 붙인다.
 
 AI 정리는 저장소마다 한 번만 만들어 docs/data/repos/<저장소>.json 에 영구 보관한다.
 순위에서 빠졌다가 다시 올라와도 저장된 정리를 그대로 쓰므로 API를 다시 부르지 않는다.
@@ -9,13 +9,12 @@ AI 정리는 저장소마다 한 번만 만들어 docs/data/repos/<저장소>.js
 외부 패키지 없이 Python 표준 라이브러리만 사용한다.
 
 환경변수 (또는 프로젝트 루트의 .env 파일):
-  OPENAI_API_KEY    없으면 AI 정리를 건너뛴다
-  OPENAI_MODEL      기본 gpt-5-mini
-  OPENAI_REASONING  gpt-5 계열의 추론 강도, 기본 low
-  OPENAI_BASE_URL   기본 https://api.openai.com/v1
+  ANTHROPIC_API_KEY 없으면 AI 정리를 건너뛴다
+  ANTHROPIC_MODEL   기본 claude-opus-5-5
+  ANTHROPIC_EFFORT  low / medium / high, 기본 medium
   GITHUB_TOKEN      없어도 동작하지만, 있으면 상세 정보·릴리스·star 추적이 풍부해진다
   MAX_SUMMARIES     한 번 실행에 새로 정리할 최대 개수 (기본 60)
-  AI_MONTHLY_TOKENS 한국 시간 한 달 동안 쓸 수 있는 OpenAI 토큰 상한 (기본 300만, data/ai_usage.json에 누적)
+  AI_MONTHLY_TOKENS 한국 시간 한 달 동안 쓸 수 있는 Claude 토큰 상한 (기본 800만, data/ai_usage.json에 누적)
 """
 
 import datetime as dt
@@ -30,6 +29,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+
+import anthropic
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DOCS_DATA = os.path.join(ROOT, "docs", "data")
@@ -279,7 +280,7 @@ def fetch_readme(gh, full):
     return gh.api(f"/repos/{full}/readme", accept="application/vnd.github.raw") or ""
 
 
-def clean_readme(text, limit=14000):
+def clean_readme(text, limit=30000):
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = re.sub(r"\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)", "", text)  # 링크 걸린 배지
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)                # 이미지
@@ -291,8 +292,40 @@ def clean_readme(text, limit=14000):
 
 # ---------------------------------------------------------------- AI
 
+DEFAULT_MODEL = "claude-opus-5-5"
+
+
 class AIFatal(Exception):
     """키 오류, 크레딧 부족처럼 다시 시도해도 소용없는 오류"""
+
+
+# 응답 스키마(구조화 출력). 모든 칸이 required라서 내용이 없으면 빈 값으로 온다.
+STR = {"type": "string"}
+INT = {"type": "integer"}
+BOOL = {"type": "boolean"}
+
+
+def obj(props):
+    return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
+
+
+def arr(item):
+    return {"type": "array", "items": item}
+
+
+SUMMARY_SCHEMA = obj({
+    "one_liner": STR, "category": STR, "what": STR, "why_hot": STR,
+    "features": arr(obj({"title": STR, "desc": STR})),
+    "install": STR,
+    "quickstart": obj({"lang": STR, "code": STR}),
+    "usage_steps": arr(STR), "use_cases": arr(STR),
+    "alternatives": arr(obj({"name": STR, "diff": STR})),
+    "caveats": arr(STR), "level": STR, "tags": arr(STR),
+})
+DIGEST_SCHEMA = obj({
+    "headline": STR, "summary": STR,
+    "themes": arr(obj({"title": STR, "desc": STR, "repos": arr(STR)})),
+})
 
 
 SUMMARY_PROMPT = """너는 GitHub에서 주목받는 오픈소스 프로젝트를 한국 개발자에게 소개하는 기술 큐레이터다.
@@ -336,7 +369,7 @@ DIGEST_PROMPT = """너는 GitHub 트렌드를 한국 개발자에게 짧게 브�
 themes는 2~4개, 각 repos는 2~5개."""
 
 
-# 월 사용량: 호출이 끝날 때마다 응답의 usage.total_tokens를 data/ai_usage.json에 더한다(실행 끝에 커밋됨).
+# 월 사용량: 호출이 끝날 때마다 응답의 입력·출력·캐시 토큰 합을 data/ai_usage.json에 더한다(실행 끝에 커밋됨).
 # 다른 앱의 AI_MONTHLY_TOKENS와 같은 역할. 상한에 닿으면 남은 AI 정리를 멈추고 실행을 실패로 표시한다.
 _usage_lock = threading.Lock()
 
@@ -347,9 +380,9 @@ def _month_kst():
 
 def _monthly_limit():
     try:
-        return int(os.environ.get("AI_MONTHLY_TOKENS") or 3_000_000)
+        return int(os.environ.get("AI_MONTHLY_TOKENS") or 8_000_000)
     except ValueError:
-        return 3_000_000
+        return 8_000_000
 
 
 def ai_month_used():
@@ -365,55 +398,50 @@ def _add_usage(tokens):
         write_json(AI_USAGE_PATH, usage)
 
 
-def chat_json(system, user):
+def chat_json(system, user, schema):
+    """Claude에 한 번 묻고 schema에 맞는 JSON을 돌려준다. SDK가 429·5xx·연결 오류를 알아서 다시 시도한다.
+    안전 분류기가 거절하면 fallbacks로 API가 다른 모델에서 다시 돌린다."""
     used, limit = ai_month_used(), _monthly_limit()
     if used >= limit:
         raise AIFatal(f"이번 달 AI 토큰 상한에 닿았습니다 ({used:,} / {limit:,}). AI_MONTHLY_TOKENS로 조정합니다.")
-    api_key = os.environ["OPENAI_API_KEY"]
-    model = os.environ.get("OPENAI_MODEL") or "gpt-5-mini"
-    body = {
-        "model": model,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        "response_format": {"type": "json_object"},
-    }
-    if re.match(r"^(gpt-5|o\d)", model):
-        body["reasoning_effort"] = os.environ.get("OPENAI_REASONING") or "low"
-    url = (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
-
-    for attempt in range(3):
-        req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": UA,
-        })
-        try:
-            with urllib.request.urlopen(req, timeout=240) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            _add_usage((d.get("usage") or {}).get("total_tokens"))
-            return json.loads(d["choices"][0]["message"]["content"])
-        except urllib.error.HTTPError as e:
-            msg = e.read().decode("utf-8", errors="replace")[:300]
-            if e.code == 401:
-                raise AIFatal("OpenAI API 키가 올바르지 않습니다 (401)") from e
-            if e.code == 403:
-                raise AIFatal(f"OpenAI 접근이 거부됐습니다 (403): {msg}") from e
-            if e.code == 404:
-                raise AIFatal(f"모델 '{model}'을(를) 쓸 수 없습니다 (404). OPENAI_MODEL을 확인하세요.") from e
-            if e.code == 429 and "insufficient_quota" in msg:
-                raise AIFatal("OpenAI 크레딧이 부족합니다. platform.openai.com의 Billing을 확인하세요.") from e
-            if e.code == 400 and "reasoning_effort" in msg and "reasoning_effort" in body:
-                body.pop("reasoning_effort")  # 이 옵션을 지원하지 않는 모델
-                continue
-            if e.code in (429, 500, 502, 503, 504) and attempt < 2:
-                time.sleep(10 * (attempt + 1))
-                continue
-            raise RuntimeError(f"OpenAI {e.code}: {msg}") from e
-        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as e:
-            if attempt < 2:
-                time.sleep(5)
-                continue
-            raise RuntimeError(f"OpenAI 응답 처리 실패: {e}") from e
-    raise RuntimeError("OpenAI 호출 실패")
+    model = os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    effort = os.environ.get("ANTHROPIC_EFFORT") or "medium"
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=4, timeout=600)
+    try:
+        with client.beta.messages.stream(
+            model=model,
+            max_tokens=32000,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        ) as stream:
+            msg = stream.get_final_message()
+    except anthropic.AuthenticationError as e:
+        raise AIFatal("Claude API 키가 올바르지 않습니다 (401)") from e
+    except anthropic.PermissionDeniedError as e:
+        raise AIFatal(f"Claude API 접근이 거부됐습니다 (403): {e.message[:300]}") from e
+    except anthropic.NotFoundError as e:
+        raise AIFatal(f"모델 '{model}'을(를) 쓸 수 없습니다 (404). ANTHROPIC_MODEL을 확인하세요.") from e
+    except anthropic.BadRequestError as e:
+        if re.search(r"credit balance|usage limits", e.message, re.I):
+            raise AIFatal("Claude API 크레딧이 없거나 지출 한도에 닿았습니다. Console의 Billing을 확인하세요.") from e
+        raise RuntimeError(f"Claude API 400: {e.message[:300]}") from e
+    except anthropic.RateLimitError as e:
+        if "usage limits" in e.message:
+            raise AIFatal("Claude API 월 지출 상한에 닿았습니다. Console의 Billing을 확인하세요.") from e
+        raise RuntimeError(f"Claude API 429: {e.message[:300]}") from e
+    except anthropic.APIError as e:
+        raise RuntimeError(f"Claude API 호출 실패: {e}") from e
+    u = msg.usage
+    _add_usage(u.input_tokens + u.output_tokens + (u.cache_creation_input_tokens or 0)
+               + (u.cache_read_input_tokens or 0))
+    if msg.stop_reason == "refusal":
+        raise RuntimeError("Claude가 응답을 거절했습니다")
+    if msg.stop_reason == "max_tokens":
+        raise RuntimeError("Claude 응답이 길이 제한으로 끊겼습니다")
+    return json.loads("".join(b.text for b in msg.content if b.type == "text"))
 
 
 def _text(v):
@@ -470,7 +498,7 @@ def summarize(repo, readme):
     }
     user = ("저장소 정보:\n" + json.dumps(info, ensure_ascii=False, indent=1)
             + "\n\nREADME:\n" + (readme or "(README 없음)"))
-    return normalize_summary(chat_json(SUMMARY_PROMPT, user))
+    return normalize_summary(chat_json(SUMMARY_PROMPT, user, SUMMARY_SCHEMA))
 
 
 def make_digest(rows, valid_keys):
@@ -478,7 +506,7 @@ def make_digest(rows, valid_keys):
     for i, r in enumerate(rows, 1):
         lines.append(f"{i}. {r['full_name']} [{r.get('language') or '-'}] "
                      f"{r.get('one_liner') or r.get('description') or ''}")
-    d = chat_json(DIGEST_PROMPT, "\n".join(lines))
+    d = chat_json(DIGEST_PROMPT, "\n".join(lines), DIGEST_SCHEMA)
     if not isinstance(d, dict) or not _text(d.get("headline")):
         raise ValueError("트렌드 요약 응답 형식이 올바르지 않습니다")
     themes = []
@@ -495,8 +523,8 @@ def make_digest(rows, valid_keys):
 def main():
     load_dotenv()
     gh_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
-    ai_on = bool(os.environ.get("OPENAI_API_KEY"))
-    model = os.environ.get("OPENAI_MODEL") or "gpt-5-mini"
+    ai_on = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    model = os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
     max_summaries = int(os.environ.get("MAX_SUMMARIES") or 60)
 
     gh = GitHub(gh_token)
@@ -657,7 +685,7 @@ def main():
     ai_error = ""
 
     if not ai_on:
-        log("OPENAI_API_KEY가 없어 AI 정리를 건너뜁니다.")
+        log("ANTHROPIC_API_KEY가 없어 AI 정리를 건너뜁니다.")
     elif todo:
         log(f"AI 정리 시작: {len(todo)}개 (모델 {model})")
         stop = threading.Event()
@@ -801,7 +829,7 @@ def main():
 
     # 심층 분석 (deep.py): 요청 이슈 + 종합 주목 상위에서 자동으로 몇 개
     import deep
-    per_run = int(os.environ.get("DEEP_PER_RUN") or 0)  # 기본은 자동 심층 분석 끔(2026-10-27, gpt-5라 가장 비쌈). 이슈 요청은 그대로
+    per_run = int(os.environ.get("DEEP_PER_RUN") or 1)  # 2026-10-31 월 API 크레딧으로 옮기며 다시 켬. 0이면 이슈 요청만
     auto = [k for k in hot if not details[k].get("deep")][:per_run] if not ai_error else []
     hn_urls = {k: r["hn"]["hn_url"] for k, r in repos.items() if r.get("hn")}
     try:
