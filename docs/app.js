@@ -5,7 +5,7 @@
   // 주소는 예전처럼 목록 id(#/t/daily, #/t/new7 …)를 그대로 써서 예전 링크도 열린다.
   const TABS = [
     { id: "hot", label: "종합 주목", desc: "아래 목록을 모두 합쳐서, 여러 곳에서 동시에 뜨는 저장소일수록 위로 올렸어요." },
-    { id: "saved", label: "★ 관심", desc: "☆를 눌러 저장한 라이브러리와, 그와 비슷한 라이브러리 추천이에요. 이 기기에만 저장돼요." },
+    { id: "saved", label: "★ 관심", desc: "☆를 눌러 저장한 라이브러리와, 그와 비슷한 라이브러리 추천이에요. hyperkwon.com에 로그인돼 있으면 모든 기기에서 같은 목록이 보여요." },
     { id: "trend", label: "트렌딩", views: ["daily", "weekly", "monthly"], desc: "GitHub Trending 기준, 고른 기간(오늘·이번 주·이번 달) 동안 star를 많이 받은 저장소예요." },
     { id: "new", label: "새로 뜬", views: ["new7", "new30"], desc: "고른 기간(7일·30일) 안에 만들어졌는데 벌써 star가 많이 쌓인 저장소예요." },
     { id: "hn", label: "HN 화제", desc: "개발자 커뮤니티 Hacker News에서 이번 주 추천과 댓글을 많이 받은 GitHub 저장소예요." },
@@ -142,6 +142,7 @@
       toast("관심 목록에 저장했어요. ★ 관심 탭에서 비슷한 라이브러리를 추천해 드려요");
     }
     store.set("gittrend:saved", saved);
+    queueSync("repo", key, saved[key]);
     document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => paintSave(b, key));
     const tabCount = document.querySelector('.tab[data-tab="saved"] .n');
     if (tabCount) tabCount.textContent = Object.keys(saved).length;
@@ -380,9 +381,13 @@
   // 다른 기기로 옮기기: 관심 라이브러리 + 즐겨찾기한 AI 소식(id만. 받는 쪽 news.json에 아직 남아 있는 소식만 옮겨짐)
   //   #/import/<라이브러리,…>&n=<소식 id,…>   (&n= 부분이 없는 예전 링크도 그대로 열림)
   function transferHtml() {
+    if (sync.state === "synced") return `<p class="sync-note">✓ hyperkwon.com에 저장돼 있어요. 다른 PC·휴대폰에서도 같은 목록이 보여요.</p>`;
+    const login = sync.state === "signed-out"
+      ? `<p class="sync-note">지금은 이 브라우저에만 저장돼요. <a href="https://hyperkwon.com/me/" target="_blank" rel="noopener">hyperkwon.com에 로그인</a>한 뒤 이 화면을 다시 열면 모든 기기에서 같은 목록을 써요.</p>`
+      : sync.state === "error" ? `<p class="sync-note">공통 목록에 연결하지 못해 이 브라우저에만 저장했어요. 다음에 열 때 다시 올려요.</p>` : "";
     const repoKeys = Object.keys(saved);
     const newsIds = Object.keys(savedNews).filter(id => /^[0-9a-f]{6,40}$/.test(id));
-    if (!repoKeys.length && !newsIds.length) return "";
+    if (!repoKeys.length && !newsIds.length) return login;
     const link = `${location.origin}${location.pathname}#/import/${encodeURIComponent(repoKeys.join(","))}` +
       (newsIds.length ? `&n=${newsIds.join(",")}` : "");
     const what = [repoKeys.length ? `관심 라이브러리 ${repoKeys.length}개` : "", newsIds.length ? `즐겨찾기한 AI 소식 ${newsIds.length}건` : ""]
@@ -396,7 +401,7 @@
           <input type="text" readonly value="${esc(link)}" aria-label="관심 목록 옮기기 링크">
           <button class="btn" type="button" id="copy-link">링크 복사</button>
         </div>
-      </section>`;
+      </section>${login}`;
   }
 
   function bindTransfer(root) {
@@ -821,6 +826,7 @@
       const key = raw.trim().toLowerCase();
       if (!/^[\w.-]+\/[\w.-]+$/.test(key) || isSaved(key)) continue;
       saved[key] = snapshot(key);
+      queueSync("repo", key, saved[key]);
       n++;
     }
     store.set("gittrend:saved", saved);
@@ -867,6 +873,98 @@
   if (!savedNews || typeof savedNews !== "object") savedNews = {};
   const isNewsSaved = id => Object.prototype.hasOwnProperty.call(savedNews, id);
 
+  // ------------------------------------------------------------ 관심 목록 공통 저장 (2026-11-04)
+  // 관심 라이브러리·즐겨찾기 기사를 hyperkwon.com 포털(/me/gittrend-saved, 로그인한 주인만)에 같이 저장해
+  // 어느 기기·브라우저에서나 같은 목록을 쓴다. 이 브라우저(localStorage)에는 그대로 사본을 두고 바로 그린다.
+  // 못 보낸 변경은 gittrend:pending에 남겨 다음에 보낸다. 처음 한 번은 이 브라우저에 있던 목록을 합쳐 올린다.
+  // GET과 text/plain POST만 쓴다(다른 출처지만 미리 묻기 요청이 생기지 않게).
+  const SYNC_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://localhost:8799/me/gittrend-saved" : "https://hyperkwon.com/me/gittrend-saved";
+  const SYNC_ID = { repo: /^[\w.-]+\/[\w.-]+$/, news: /^[0-9a-f]{6,40}$/ };
+  const sync = { state: "idle", busy: false, again: false, timer: 0, at: 0 }; // state: idle | synced | signed-out | error
+  let pending = store.get("gittrend:pending", []);
+  if (!Array.isArray(pending)) pending = [];
+  const opKey = o => `${o.kind}:${o.id}`;
+
+  function queueSync(kind, id, value) {
+    pending = pending.filter(o => !(o.kind === kind && o.id === id));
+    pending.push({ kind, id, value: value ?? null });
+    store.set("gittrend:pending", pending);
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(runSync, 400); // 여러 개를 빠르게 눌러도 한 번에 보낸다
+  }
+
+  async function runSync() {
+    if (sync.busy) { sync.again = true; return; }
+    sync.busy = true;
+    sync.at = Date.now();
+    const before = sync.state;
+    let changed = false;
+    try {
+      let ops = pending.slice();
+      if (!store.get("gittrend:syncedOnce", false)) {
+        const have = new Set(ops.map(opKey));
+        for (const k in saved) if (!have.has(`repo:${k}`)) ops.push({ kind: "repo", id: k, value: saved[k] });
+        for (const id in savedNews) if (!have.has(`news:${id}`)) ops.push({ kind: "news", id, value: savedNews[id] });
+      }
+      ops = ops.filter(o => SYNC_ID[o.kind]?.test(o.id) && JSON.stringify(o.value ?? null).length < 20000);
+      const opt = { credentials: "include", redirect: "manual", cache: "no-store" };
+      const res = ops.length
+        ? await fetch(SYNC_URL, { ...opt, method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ ops }) })
+        : await fetch(SYNC_URL, opt);
+      if (res.type === "opaqueredirect" || res.status === 401 || res.status === 403) { sync.state = "signed-out"; return; }
+      if (!res.ok) throw new Error(String(res.status));
+      const st = await res.json();
+      // 보낸 것만 대기열에서 뺀다(보내는 사이 새로 누른 것은 남겨 다음에 보냄)
+      const sent = new Map(ops.map(o => [opKey(o), JSON.stringify(o.value ?? null)]));
+      pending = pending.filter(o => sent.get(opKey(o)) !== JSON.stringify(o.value ?? null));
+      store.set("gittrend:pending", pending);
+      store.set("gittrend:syncedOnce", true);
+      const nextSaved = { ...(st.repos || {}) }, nextNews = { ...(st.news || {}) };
+      for (const o of pending) {
+        const t = o.kind === "repo" ? nextSaved : nextNews;
+        if (o.value) t[o.id] = o.value; else delete t[o.id];
+      }
+      const keys = o => JSON.stringify(Object.keys(o).sort());
+      changed = keys(nextSaved) !== keys(saved) || keys(nextNews) !== keys(savedNews);
+      saved = nextSaved;
+      savedNews = nextNews;
+      store.set("gittrend:saved", saved);
+      store.set("gittrend:newsSaved", savedNews);
+      sync.state = "synced";
+    } catch (_) {
+      sync.state = "error";
+    } finally {
+      sync.busy = false;
+      if (changed || sync.state !== before) refreshSaved();
+      if (sync.again) { sync.again = false; runSync(); }
+    }
+  }
+
+  // 다른 기기에서 바꾼 목록을 반영해 지금 화면을 다시 그린다
+  function refreshSaved() {
+    if (!data) return;
+    const h = location.hash;
+    if (isNewsHash(h)) { if (news && !newsState.article) renderNews(); }
+    else if (onList) renderList();
+    document.querySelectorAll("[data-save]").forEach(b => paintSave(b, b.dataset.save));
+    document.querySelectorAll("[data-nsave]").forEach(x => {
+      const on = isNewsSaved(x.dataset.nsave);
+      x.setAttribute("aria-pressed", on);
+      x.setAttribute("aria-label", on ? "즐겨찾기 해제" : "즐겨찾기 추가");
+      x.textContent = on ? "★" : "☆";
+      x.title = on ? "즐겨찾기에서 빼기" : "즐겨찾기에 저장";
+    });
+    document.querySelectorAll(".nsaved-n").forEach(n => { n.textContent = Object.keys(savedNews).length; });
+    const tabCount = document.querySelector('.tab[data-tab="saved"] .n');
+    if (tabCount) tabCount.textContent = Object.keys(saved).length;
+  }
+
+  // 다른 기기에서 바꾼 것을 받아 오도록, 화면으로 돌아올 때 다시 맞춘다(30초에 한 번까지)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && data && Date.now() - sync.at > 30000) runSync();
+  });
+
   function toggleNewsSave(id, quiet = false) {
     if (isNewsSaved(id)) {
       delete savedNews[id];
@@ -878,6 +976,7 @@
       if (!quiet) toast("★ 즐겨찾기에 저장했어요");
     }
     store.set("gittrend:newsSaved", savedNews);
+    queueSync("news", id, savedNews[id]);
     return isNewsSaved(id);
   }
 
@@ -1498,6 +1597,7 @@
       if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(Claude API 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
       setStatusNote("index", notes.join(" "));
       route();
+      runSync();
     })
     .catch(() => {
       $app.innerHTML = `<p class="empty">데이터를 불러오지 못했어요. 수집기(collect.py)를 먼저 실행해 주세요.</p>`;

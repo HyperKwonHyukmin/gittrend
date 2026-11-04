@@ -603,3 +603,7 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
 
 /* 휴대폰에서는 배포 버전 표시를 숨김(2026-10-17) */
 @media (max-width: 640px) { #hk-build { display: none !important; } }
+
+/* 관심 목록 공통 저장 상태(app.js transferHtml) */
+.sync-note { margin: 14px 0 0; color: var(--ink-3); font-size: 13.5px; }
+.sync-note a { color: var(--accent-ink); }
