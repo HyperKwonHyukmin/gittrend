@@ -101,6 +101,11 @@ button { font: inherit; color: inherit; }
 .idea-btn:hover, .idea-btn:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
 .idea-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
+/* 지금 업데이트: 상단에서 눈에 띄게(강조색) */
+.update-btn { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.update-btn:hover, .update-btn:focus-visible { background: var(--accent); border-color: var(--accent); color: #fff; }
+.update-btn[hidden] { display: none; }
+
 /* ---------- 탭 */
 .tabs {
   display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
@@ -552,8 +557,7 @@ details.basic { margin-top: 14px; }
 details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2); padding: 8px 0; }
 
 .foot-links a { color: var(--ink-2); margin-left: 6px; }
-.foot-links a:hover, .update-link:hover { color: var(--accent-ink); }
-.update-link { color: var(--ink-2); }
+.foot-links a:hover { color: var(--accent-ink); }
 
 /* ---------- 모바일 */
 @media (max-width: 640px) {
@@ -567,7 +571,10 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
   .brand-name { display: none; }
   .sections { margin-left: auto; }
   .sec { padding: 6px 13px; }
-  .search { max-width: none; height: 38px; flex-basis: 100%; margin-left: 0; }
+  .search { max-width: none; height: 38px; flex: 1 1 calc(100% - 150px); margin-left: 0; }
+  /* 휴대폰: 검색칸 옆 둘째 줄에 글자까지 보이게 */
+  .update-btn { order: 3; width: auto; height: 38px; padding: 0 12px; }
+  .update-btn span { display: inline; }
   .news-item { padding: 14px 15px; }
   .topic-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 14px -16px 0; padding: 0 16px; }
   .topic-chips::-webkit-scrollbar { display: none; }

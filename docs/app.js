@@ -1486,13 +1486,13 @@
         const body = "GitTrend 데이터를 지금 업데이트해 주세요.\n\n" +
           "제목을 바꾸지 말고 그대로 [Create] 버튼을 누르면 됩니다.\n" +
           "5~15분 뒤 끝나면 이 이슈에 댓글이 달리고 자동으로 닫혀요.";
-        const a = document.createElement("a");
-        a.className = "update-link";
-        a.href = `${base}/issues/new?title=update&body=${encodeURIComponent(body)}`;
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.textContent = "지금 업데이트 ↗";
-        updated.append(" · ", a);
+        // 상단 막대의 버튼(2026-11-04: 페이지 맨 아래까지 내리지 않고 바로 누르게)
+        const btn = document.getElementById("update-btn");
+        if (btn) {
+          btn.href = `${base}/issues/new?title=update&body=${encodeURIComponent(body)}`;
+          btn.title = `${updated.textContent} · 누르면 GitHub 이슈 창이 열려요`;
+          btn.hidden = false;
+        }
       }
       const notes = [];
       if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(Claude API 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
