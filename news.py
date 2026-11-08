@@ -2,7 +2,7 @@
 
 최신 AI 흐름, 새 모델, 새 도구·라이브러리, 유용한 사용법을 모아 docs/data/news.json 을 만든다.
 출처는 일반 언론 대신 '직접 써먹을 수 있는 소식'이 나오는 곳만 쓴다.
-  새 모델     OpenRouter 모델 목록(등록일·가격·컨텍스트), Hugging Face 인기 모델
+  새 모델     OpenRouter 모델 목록(등록일·가격·컨텍스트), Hugging Face 인기 모델·Spaces
   공식 발표   OpenAI, Google DeepMind, Google AI, Hugging Face 블로그
   도구 릴리스 자주 쓰는 도구의 GitHub 릴리스 (TOOL_REPOS)
   사용법      Simon Willison, Latent Space, GeekNews, Hacker News(AI 화제글)
@@ -251,6 +251,35 @@ def hf_models(limit, min_likes=100):
     return out
 
 
+# 인기 Spaces 상위는 성인물·얼굴 바꾸기·검열 해제 데모가 많아서 AI 판단 전에 거른다
+SPACE_SKIP = re.compile(r"uncensored|nsfw|porn|eros|hentai|nude|cum\b|face ?swap|head ?swap|undress", re.I)
+
+
+def hf_spaces(limit, min_likes=50):
+    """Hugging Face에서 요즘 뜨는 Spaces(브라우저에서 바로 써 보는 데모) 중 최근에 나온 것."""
+    body, _ = core.http_get("https://huggingface.co/api/spaces?sort=trendingScore&limit=60"
+                            "&expand[]=cardData&expand[]=likes&expand[]=createdAt&expand[]=sdk")
+    fresh_after = dt.datetime.now(core.KST) - dt.timedelta(days=21)
+    out = []
+    for s in json.loads(body):
+        sid = s.get("id") or ""
+        card = s.get("cardData") or {}
+        title = card.get("title") or sid.split("/")[-1]
+        desc = card.get("short_description") or ""
+        created = parse_date(s.get("createdAt"))
+        if (not desc or SPACE_SKIP.search(f"{sid} {title} {desc}") or (s.get("likes") or 0) < min_likes
+                or not created or created < fresh_after):
+            continue
+        a = make(f"{title} (Space)", f"https://huggingface.co/spaces/{sid}", "Hugging Face Spaces", None,
+                 f"{desc} · 좋아요 {s.get('likes')}", "Hugging Face Spaces",
+                 {"likes": s.get("likes"), "body_url": f"https://huggingface.co/spaces/{sid}/raw/main/README.md"})
+        if a:
+            out.append(a)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def hn_search(queries, limit, min_points, ai_only=True):
     """Hacker News 검색. 같은 글이 여러 검색어에 걸리면 한 번만. ai_only=False면 검색어 없이 화제글 전체."""
     since = int(dt.datetime.now().timestamp()) - FRESH_HOURS * 3600
@@ -332,6 +361,7 @@ def ko_blogs(limit):
 SOURCES = [
     ("OpenRouter 새 모델", lambda: openrouter_models(15)),
     ("Hugging Face 인기 모델", lambda: hf_models(6)),
+    ("Hugging Face Spaces", lambda: hf_spaces(5)),
     ("OpenAI", lambda: rss_source("https://openai.com/news/rss.xml", "OpenAI", 10)),
     ("Google DeepMind", lambda: rss_source("https://deepmind.google/blog/rss.xml", "Google DeepMind", 6)),
     ("Google AI", lambda: rss_source("https://blog.google/technology/ai/rss/", "Google AI", 6)),

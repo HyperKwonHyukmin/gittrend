@@ -66,7 +66,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 
 | 분류 | 출처 |
 |---|---|
-| 새 모델 | OpenRouter 모델 목록 (등록일·가격·컨텍스트 길이), Hugging Face 인기 모델 (양자화·변환본 제외) |
+| 새 모델 | OpenRouter 모델 목록 (등록일·가격·컨텍스트 길이), Hugging Face 인기 모델 (양자화·변환본 제외), Hugging Face 인기 Spaces (브라우저에서 바로 써 보는 데모, 3주 안·좋아요 50 이상, 성인물·얼굴 바꾸기·검열 해제 데모 제외) |
 | 공식 발표 | OpenAI, Google DeepMind, Google AI, Hugging Face 블로그 |
 | 도구 릴리스 | Claude Code, Codex CLI, OpenAI Python SDK, Ollama, Vite, React, Playwright, Capacitor의 GitHub 릴리스 (시험판 제외, `news.py`의 `TOOL_REPOS`에서 바꿀 수 있음) |
 | 사용법·흐름 | Simon Willison, Latent Space, GeekNews, Hacker News (AI 화제글) |
