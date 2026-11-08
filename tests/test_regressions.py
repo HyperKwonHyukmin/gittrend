@@ -263,6 +263,7 @@ class CollectorTests(unittest.TestCase):
             stack.enter_context(patch.object(collect, "fetch_trending",
                                             return_value=[item] if trending else []))
             stack.enter_context(patch.object(collect, "fetch_new_repos", return_value=[]))
+            stack.enter_context(patch.object(collect, "fetch_topic_repos", return_value=[]))
             stack.enter_context(patch.object(collect, "fetch_hn", return_value=[hn]))
             api = stack.enter_context(patch.object(collect.GitHub, "api", return_value=api_result))
             digest = stack.enter_context(patch.object(collect, "make_digest",

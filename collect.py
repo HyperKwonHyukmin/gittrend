@@ -232,6 +232,46 @@ def fetch_new_repos(gh, days, count=30):
     return [meta_from_api(x) for x in (d or {}).get("items", [])]
 
 
+# 내 관심 분야 토픽: 목록 id -> GitHub 토픽. 트렌드와 상관없이 그 토픽의 star 많은 저장소를 늘 보여준다.
+# 종합 주목 점수에는 넣지 않는다(LIST_WEIGHTS에 없음). 화면 탭은 docs/app.js의 TABS.
+TOPIC_LISTS = {
+    "fea": "finite-element-analysis",
+}
+TOPIC_COUNT = 30
+
+
+# 토픽을 달지 않아 검색에 안 잡히는 주요 저장소를 직접 넣는다 (목록 id -> 저장소)
+# Code_Aster는 GitLab에만 있어 넣지 못했다.
+TOPIC_EXTRAS = {
+    "fea": [
+        "Dhondtguido/CalculiX", "OpenSees/OpenSees", "idaholab/moose", "FEniCS/dolfinx", "dealii/dealii",
+        "ElmerCSC/elmerfem", "mfem/mfem", "KratosMultiphysics/Kratos", "kinnala/scikit-fem",
+        "sfepy/sfepy", "firedrakeproject/firedrake",
+    ],
+}
+
+
+def fetch_topic_repos(gh, name, meta, count=TOPIC_COUNT):
+    """토픽 검색 상위 + 직접 넣은 저장소를 합쳐 star 많은 순으로."""
+    q = urllib.parse.quote(f"topic:{TOPIC_LISTS[name]} archived:false")
+    d = gh.api(f"/search/repositories?q={q}&sort=stars&order=desc&per_page={count + 5}")
+    items = [x for x in (d or {}).get("items", []) if not x["name"].lower().startswith("awesome")]  # 링크 모음은 뺀다
+    out = {m["full_name"].lower(): m for m in map(meta_from_api, items[:count])}
+    fresh_after = (today_kst() - dt.timedelta(days=META_REFRESH_DAYS)).isoformat()
+    for full in TOPIC_EXTRAS.get(name, []):
+        key = full.lower()
+        if key in out:
+            continue
+        cached = meta.get(key, {})
+        if cached.get("stars") is not None and cached.get("fetched", "") >= fresh_after:
+            out[key] = cached  # 일주일 안에 받은 정보는 다시 받지 않는다
+            continue
+        r = gh.api(f"/repos/{full}")
+        if r:
+            out[key] = meta_from_api(r)
+    return sorted(out.values(), key=lambda m: -(m.get("stars") or 0))
+
+
 def fetch_hn(days=7, min_points=30):
     since = int(time.time()) - days * 86400
     url = (
@@ -539,7 +579,7 @@ def main():
 
     repos = {}   # key -> 오늘 화면에 쓸 정보
     fresh_star_keys = set()  # 이번 실행에서 실제로 확인한 star 값만 기록한다
-    lists = {k: [] for k in LIST_WEIGHTS}
+    lists = {k: [] for k in [*LIST_WEIGHTS, *TOPIC_LISTS]}
 
     def upsert(info, fresh=True):
         key = info["full_name"].lower()
@@ -586,6 +626,15 @@ def main():
         key = upsert({"full_name": it["full_name"]})
         repos[key]["hn"] = {k: it[k] for k in ("points", "comments", "title", "hn_url")}
         lists["hn"].append(key)
+
+    # 3-1) 관심 분야 토픽 (star 많은 순)
+    for name, topic in TOPIC_LISTS.items():
+        items = fetch_topic_repos(gh, name, meta)
+        log(f"토픽 {topic} (+직접 넣은 저장소): {len(items)}개")
+        for it in items:
+            key = upsert(it, fresh=it.get("fetched") == today_s)  # 캐시에서 온 star는 오늘 기록에 넣지 않는다
+            meta[key] = {**meta.get(key, {}), **it}
+            lists[name].append(key)
 
     # 4) 상세 정보 보강 (토픽, 라이선스, 생성일, 최신 릴리스). 일주일 지난 캐시만 다시 받는다.
     refresh_before = (today - dt.timedelta(days=META_REFRESH_DAYS)).isoformat()
@@ -664,7 +713,7 @@ def main():
     for key, r in repos.items():
         score = 0.0
         for name, lst in lists.items():
-            if key in lst:
+            if name in LIST_WEIGHTS and key in lst:
                 score += LIST_WEIGHTS[name] * (1 - lst.index(key) / max(len(lst), 1))
                 r["sources"].append(name)
         r["score"] = round(score, 3)
