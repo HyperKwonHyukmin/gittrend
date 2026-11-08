@@ -243,10 +243,16 @@ TOPIC_LISTS = {
         ("naval-architecture", 10),
         ("structural-analysis", 10),
     ],
+    # Cloudflare 탭: keep·ProjectLedger가 Workers + D1 위에서 돈다.
+    # cloudflare-workers 토픽은 VPN·프록시 우회 도구가 상위라 넣지 않고, D1 토픽 + 직접 고른 라이브러리만 쓴다.
+    "cf": [
+        ("cloudflare-d1", 20),
+    ],
 }
 TOPIC_MIN_STARS = 10
 # 토픽만 맞고 내용은 다른 분야인 저장소 (소셜 네트워크 분석, 운전자 피로 뇌파 등)
-TOPIC_SKIP = {"socnetv/app", "dttutty/seed-vig-cnn", "cranot/agi-in-md"}
+TOPIC_SKIP = {"socnetv/app", "dttutty/seed-vig-cnn", "cranot/agi-in-md",
+              "94fzb/zrlog", "elsbrock/hetzner-radar"}
 
 
 # 토픽을 달지 않아 검색에 안 잡히는 주요 저장소를 직접 넣는다 (목록 id -> 저장소)
@@ -256,6 +262,10 @@ TOPIC_EXTRAS = {
         "Dhondtguido/CalculiX", "OpenSees/OpenSees", "idaholab/moose", "FEniCS/dolfinx", "dealii/dealii",
         "ElmerCSC/elmerfem", "mfem/mfem", "KratosMultiphysics/Kratos", "kinnala/scikit-fem",
         "sfepy/sfepy", "firedrakeproject/firedrake",
+    ],
+    "cf": [
+        "honojs/hono", "cloudflare/workers-sdk", "drizzle-team/drizzle-orm", "cloudflare/agents",
+        "cloudflare/templates", "cloudflare/workers-oauth-provider",
     ],
 }
 

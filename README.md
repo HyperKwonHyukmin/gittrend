@@ -13,6 +13,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 | HN 화제 | Hacker News (Algolia API) | 개발자 커뮤니티에서 추천과 댓글을 많이 받은 저장소 |
 | 급상승 | 자체 star 기록 | 어제보다 star가 많이 늘어난 저장소. 이틀째부터 나타남 |
 | 구조해석 | GitHub 검색 API (토픽 `finite-element-analysis` 30 · `nastran` · `fatigue-analysis` · `naval-architecture` · `structural-analysis` 각 10) + 직접 넣은 주요 저장소 | 관심 분야. 트렌드와 상관없이 star 많은 순, 겹치는 저장소는 하나로. star 10개 미만·링크 모음·보관된 저장소 제외. 토픽을 달지 않은 CalculiX·OpenSees·MOOSE·FEniCS·deal.II·Elmer·MFEM·Kratos·scikit-fem·SfePy·Firedrake를 더함. 토픽은 `collect.py`의 `TOPIC_LISTS`, 직접 넣는 저장소는 `TOPIC_EXTRAS`에서 바꿈 |
+| Cloudflare | GitHub 검색 API (토픽 `cloudflare-d1` 20) + 직접 넣은 주요 저장소 | 관심 분야. D1 위에서 도는 앱·DB 도구에 Hono·Wrangler(workers-sdk)·Drizzle ORM·Cloudflare Agents·templates·workers-oauth-provider를 더함. `cloudflare-workers` 토픽은 VPN·프록시 우회 도구가 상위라 넣지 않음 |
 
 그 밖에: 오늘 처음 등장한 저장소의 **NEW** 표시와 "NEW만 보기", 언어·분류 필터, 정렬, 저장소별 star 변화 그래프, 마지막 커밋·최신 릴리스·보관 여부 표시가 있습니다.
 
