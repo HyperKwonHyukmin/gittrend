@@ -232,12 +232,21 @@ def fetch_new_repos(gh, days, count=30):
     return [meta_from_api(x) for x in (d or {}).get("items", [])]
 
 
-# 내 관심 분야 토픽: 목록 id -> GitHub 토픽. 트렌드와 상관없이 그 토픽의 star 많은 저장소를 늘 보여준다.
-# 종합 주목 점수에는 넣지 않는다(LIST_WEIGHTS에 없음). 화면 탭은 docs/app.js의 TABS.
+# 내 관심 분야: 목록 id -> [(GitHub 토픽, 가져올 수)]. 트렌드와 상관없이 그 토픽의 star 많은 저장소를 늘 보여준다.
+# 토픽 여러 개를 한 탭에 모으고 겹치는 저장소는 하나로 친다. star 10개 미만은 뺀다.
+# 종합 주목 점수에는 넣지 않는다(LIST_WEIGHTS에 없음). 화면 탭은 docs/app.js의 TABS (목록 id "fea" = 구조해석 탭).
 TOPIC_LISTS = {
-    "fea": "finite-element-analysis",
+    "fea": [
+        ("finite-element-analysis", 30),
+        ("nastran", 10),
+        ("fatigue-analysis", 10),
+        ("naval-architecture", 10),
+        ("structural-analysis", 10),
+    ],
 }
-TOPIC_COUNT = 30
+TOPIC_MIN_STARS = 10
+# 토픽만 맞고 내용은 다른 분야인 저장소 (소셜 네트워크 분석, 운전자 피로 뇌파 등)
+TOPIC_SKIP = {"socnetv/app", "dttutty/seed-vig-cnn", "cranot/agi-in-md"}
 
 
 # 토픽을 달지 않아 검색에 안 잡히는 주요 저장소를 직접 넣는다 (목록 id -> 저장소)
@@ -251,12 +260,16 @@ TOPIC_EXTRAS = {
 }
 
 
-def fetch_topic_repos(gh, name, meta, count=TOPIC_COUNT):
-    """토픽 검색 상위 + 직접 넣은 저장소를 합쳐 star 많은 순으로."""
-    q = urllib.parse.quote(f"topic:{TOPIC_LISTS[name]} archived:false")
-    d = gh.api(f"/search/repositories?q={q}&sort=stars&order=desc&per_page={count + 5}")
-    items = [x for x in (d or {}).get("items", []) if not x["name"].lower().startswith("awesome")]  # 링크 모음은 뺀다
-    out = {m["full_name"].lower(): m for m in map(meta_from_api, items[:count])}
+def fetch_topic_repos(gh, name, meta):
+    """토픽마다 검색 상위 + 직접 넣은 저장소를 합쳐 star 많은 순으로."""
+    out = {}
+    for topic, count in TOPIC_LISTS[name]:
+        q = urllib.parse.quote(f"topic:{topic} archived:false stars:>={TOPIC_MIN_STARS}")
+        d = gh.api(f"/search/repositories?q={q}&sort=stars&order=desc&per_page={count + 5}")
+        items = [x for x in (d or {}).get("items", []) if not x["name"].lower().startswith("awesome")]  # 링크 모음은 뺀다
+        items = [x for x in items if x["full_name"].lower() not in TOPIC_SKIP]
+        for m in map(meta_from_api, items[:count]):
+            out.setdefault(m["full_name"].lower(), m)
     fresh_after = (today_kst() - dt.timedelta(days=META_REFRESH_DAYS)).isoformat()
     for full in TOPIC_EXTRAS.get(name, []):
         key = full.lower()
@@ -628,9 +641,9 @@ def main():
         lists["hn"].append(key)
 
     # 3-1) 관심 분야 토픽 (star 많은 순)
-    for name, topic in TOPIC_LISTS.items():
+    for name, topics in TOPIC_LISTS.items():
         items = fetch_topic_repos(gh, name, meta)
-        log(f"토픽 {topic} (+직접 넣은 저장소): {len(items)}개")
+        log(f"관심 분야 {name} (토픽 {', '.join(t for t, _ in topics)} + 직접 넣은 저장소): {len(items)}개")
         for it in items:
             key = upsert(it, fresh=it.get("fetched") == today_s)  # 캐시에서 온 star는 오늘 기록에 넣지 않는다
             meta[key] = {**meta.get(key, {}), **it}

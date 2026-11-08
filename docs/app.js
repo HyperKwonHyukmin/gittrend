@@ -10,7 +10,7 @@
     { id: "new", label: "새로 뜬", views: ["new7", "new30"], desc: "고른 기간(7일·30일) 안에 만들어졌는데 벌써 star가 많이 쌓인 저장소예요." },
     { id: "hn", label: "HN 화제", desc: "개발자 커뮤니티 Hacker News에서 이번 주 추천과 댓글을 많이 받은 GitHub 저장소예요." },
     { id: "rising", label: "급상승", desc: "매일 star 수를 기록해서, 어제보다 star가 가장 많이 늘어난 저장소예요. 기록이 이틀 이상 쌓이면 나타나요." },
-    { id: "fea", label: "FEA", desc: "관심 분야: GitHub 토픽 finite-element-analysis에서 star가 많은 유한요소해석 라이브러리예요. 트렌드와 상관없이 늘 보여요." },
+    { id: "fea", label: "구조해석", desc: "관심 분야: 유한요소해석(FEA)·Nastran·피로·조선·구조해석 GitHub 토픽에서 star가 많은 라이브러리에, 토픽을 달지 않은 주요 해석 도구(CalculiX·OpenSees·FEniCS 등)를 더했어요. 트렌드와 상관없이 늘 보여요." },
   ];
   const VIEW_LABEL = { daily: "오늘", weekly: "이번 주", monthly: "이번 달", new7: "7일", new30: "30일" };
   // 목록 id → 탭 (기간이 없는 탭은 목록 id가 곧 탭 id)
