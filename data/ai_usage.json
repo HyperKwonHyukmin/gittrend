@@ -1,1 +1,1 @@
-{"2026-10":{"tokens":1053382,"calls":206},"2026-11":{"tokens":7459006,"calls":906,"by_kind":{"summary":{"tokens":27726,"calls":5},"news_judge":{"tokens":18175,"calls":2},"news_card":{"tokens":7949,"calls":2},"deep":{"tokens":32656,"calls":1}}}}
+{"2026-10":{"tokens":1053382,"calls":206},"2026-11":{"tokens":7542915,"calls":916,"by_kind":{"summary":{"tokens":97615,"calls":13},"news_judge":{"tokens":28933,"calls":3},"news_card":{"tokens":7949,"calls":2},"deep":{"tokens":32656,"calls":1},"digest":{"tokens":3262,"calls":1}}}}
