@@ -94,3 +94,7 @@
 - **GitHub 403:** 한도(남은 횟수 0, 'rate limit' 문구, 429)일 때만 core API를 멈춘다. 차단된 저장소 하나로 그 실행의 상세 갱신·추적이 모두 멈추던 문제.
 - **심층 분석 모델:** `os.environ`을 바꾸지 않고 `chat_json(model=, effort=)`로 넘긴다.
 - 하지 않은 것(영향 작음): concurrency로 취소된 "update" 이슈가 열린 채 남는 문제, Hugging Face 항목이 14일 뒤 다시 판단되는 문제.
+- 남은 일 (2026-11-14 기준):
+  - [ ] GitHub Variables에 `AI_MONTHLY_TOKENS` 넣기(사용자 직접). 넣지 않으면 기본 800만에서 11월 중순에 멈춘다.
+  - [ ] 2026-12 초: `data/ai_usage.json`의 11월 `by_kind`를 보고 줄일 곳(카드 수 `MAX_NEWS_CARDS`, 심층 분석 `DEEP_PER_RUN`, 자료 길이 등)을 정한다.
+    by_kind는 2026-11-14 배포 뒤부터만 쌓이므로 11월 값은 절반쯤만 있다.
