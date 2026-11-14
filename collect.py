@@ -151,6 +151,21 @@ def safe_url(u):
 
 # ---------------------------------------------------------------- GitHub API
 
+def is_rate_limited(e):
+    """GitHub 403은 한도 초과일 수도, 저장소 하나가 막힌 것일 수도 있다. 한도일 때만 True."""
+    if e.code == 429:
+        return True
+    if e.code != 403:
+        return False
+    if (e.headers or {}).get("X-RateLimit-Remaining") == "0":
+        return True
+    try:
+        body = e.read().decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        body = ""
+    return "rate limit" in body.lower()
+
+
 class GitHub:
     def __init__(self, token):
         self.token = token
@@ -165,11 +180,11 @@ class GitHub:
         try:
             body, h = http_get("https://api.github.com" + path, headers)
         except urllib.error.HTTPError as e:
-            if e.code in (403, 429):
+            if is_rate_limited(e):
                 if not path.startswith("/search"):
                     self.core_blocked = True
                 log(f"  ! GitHub API 사용 한도 도달 ({path})")
-            elif e.code != 404:
+            elif e.code != 404:  # 403이어도 한도가 아니면(차단된 저장소 등) 이 저장소만 건너뛴다
                 log(f"  ! GitHub API {e.code} {path}")
             return None
         except Exception as e:  # noqa: BLE001 - 네트워크 오류는 건너뛴다
@@ -362,6 +377,14 @@ class AIFatal(Exception):
     """키 오류, 크레딧 부족처럼 다시 시도해도 소용없는 오류"""
 
 
+# 월 토큰 상한에 닿은 것은 고장이 아니라 정해 둔 멈춤이다. 실행을 실패로 표시하지 않고 화면 안내만 한다.
+BUDGET_PREFIX = "이번 달 AI 토큰 상한"
+
+
+def is_budget_error(msg):
+    return (msg or "").startswith(BUDGET_PREFIX)
+
+
 # 응답 스키마(구조화 출력). 모든 칸이 required라서 내용이 없으면 빈 값으로 온다.
 STR = {"type": "string"}
 INT = {"type": "integer"}
@@ -452,23 +475,31 @@ def ai_month_used():
     return int(read_json(AI_USAGE_PATH, {}).get(_month_kst(), {}).get("tokens", 0))
 
 
-def _add_usage(tokens):
+def _add_usage(tokens, kind=""):
+    """월 합계와 함께 종류별(summary·digest·news_judge·news_card·news_brief·deep) 합계도 남긴다.
+    어디에 토큰이 드는지 보고 줄일 곳을 고르기 위함이다."""
+    tokens = int(tokens or 0)
     with _usage_lock:
         usage = read_json(AI_USAGE_PATH, {})
         m = usage.setdefault(_month_kst(), {"tokens": 0, "calls": 0})
-        m["tokens"] = int(m.get("tokens", 0)) + int(tokens or 0)
+        m["tokens"] = int(m.get("tokens", 0)) + tokens
         m["calls"] = int(m.get("calls", 0)) + 1
+        if kind:
+            k = m.setdefault("by_kind", {}).setdefault(kind, {"tokens": 0, "calls": 0})
+            k["tokens"] += tokens
+            k["calls"] += 1
         write_json(AI_USAGE_PATH, usage)
 
 
-def chat_json(system, user, schema):
+def chat_json(system, user, schema, kind="", model=None, effort=None):
     """Claude에 한 번 묻고 schema에 맞는 JSON을 돌려준다. SDK가 429·5xx·연결 오류를 알아서 다시 시도한다.
-    안전 분류기가 거절하면 fallbacks로 API가 다른 모델에서 다시 돌린다."""
+    안전 분류기가 거절하면 fallbacks로 API가 다른 모델에서 다시 돌린다.
+    kind는 사용량 기록용 이름, model·effort를 주지 않으면 ANTHROPIC_MODEL·ANTHROPIC_EFFORT를 쓴다."""
     used, limit = ai_month_used(), _monthly_limit()
     if used >= limit:
-        raise AIFatal(f"이번 달 AI 토큰 상한에 닿았습니다 ({used:,} / {limit:,}). AI_MONTHLY_TOKENS로 조정합니다.")
-    model = os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
-    effort = os.environ.get("ANTHROPIC_EFFORT") or "medium"
+        raise AIFatal(f"{BUDGET_PREFIX}에 닿았습니다 ({used:,} / {limit:,}). 다음 달 1일에 다시 시작하며, AI_MONTHLY_TOKENS로 조정합니다.")
+    model = model or os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    effort = effort or os.environ.get("ANTHROPIC_EFFORT") or "medium"
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=4, timeout=600)
     try:
         with client.beta.messages.stream(
@@ -499,7 +530,7 @@ def chat_json(system, user, schema):
         raise RuntimeError(f"Claude API 호출 실패: {e}") from e
     u = msg.usage
     _add_usage(u.input_tokens + u.output_tokens + (u.cache_creation_input_tokens or 0)
-               + (u.cache_read_input_tokens or 0))
+               + (u.cache_read_input_tokens or 0), kind)
     if msg.stop_reason == "refusal":
         raise RuntimeError("Claude가 응답을 거절했습니다")
     if msg.stop_reason == "max_tokens":
@@ -561,7 +592,7 @@ def summarize(repo, readme):
     }
     user = ("저장소 정보:\n" + json.dumps(info, ensure_ascii=False, indent=1)
             + "\n\nREADME:\n" + (readme or "(README 없음)"))
-    return normalize_summary(chat_json(SUMMARY_PROMPT, user, SUMMARY_SCHEMA))
+    return normalize_summary(chat_json(SUMMARY_PROMPT, user, SUMMARY_SCHEMA, kind="summary"))
 
 
 def make_digest(rows, valid_keys):
@@ -569,7 +600,7 @@ def make_digest(rows, valid_keys):
     for i, r in enumerate(rows, 1):
         lines.append(f"{i}. {r['full_name']} [{r.get('language') or '-'}] "
                      f"{r.get('one_liner') or r.get('description') or ''}")
-    d = chat_json(DIGEST_PROMPT, "\n".join(lines), DIGEST_SCHEMA)
+    d = chat_json(DIGEST_PROMPT, "\n".join(lines), DIGEST_SCHEMA, kind="digest")
     if not isinstance(d, dict) or not _text(d.get("headline")):
         raise ValueError("트렌드 요약 응답 형식이 올바르지 않습니다")
     themes = []
@@ -582,6 +613,22 @@ def make_digest(rows, valid_keys):
 
 
 # ---------------------------------------------------------------- 본체
+
+# star 증가량을 계산할 때 비교 기록이 이만큼까지 더 오래돼도 쓴다 (기간 일수 -> 허용 일수).
+# 하루 증가량은 정확히 어제 기록만 쓴다. 더 오래된 기록과 비교하면 며칠치 증가가 '어제보다'로 보여
+# 오래 빠졌다가 다시 뜬 저장소가 급상승 맨 위로 올라간다(2026-11-14 검토에서 확인).
+GROWTH_SLACK = {1: 0, 7: 2}
+
+
+def growth_of(h, today, days):
+    """h: {날짜: star}. 오늘 기록과 days일 전(허용 범위 안) 기록의 차이, 비교할 기록이 없으면 None."""
+    today_s = today.isoformat()
+    if today_s not in h:
+        return None
+    target = today - dt.timedelta(days=days)
+    lo = (target - dt.timedelta(days=GROWTH_SLACK.get(days, 0))).isoformat()
+    past = [d for d in h if lo <= d <= target.isoformat()]
+    return h[today_s] - h[max(past)] if past else None
 
 def main():
     load_dotenv()
@@ -717,12 +764,7 @@ def main():
             history.setdefault(key, {})[today_s] = r["stars"]
 
     def growth(key, days):
-        h = history.get(key, {})
-        if today_s not in h:
-            return None
-        target = (today - dt.timedelta(days=days)).isoformat()
-        past = [d for d in h if d <= target]
-        return h[today_s] - h[max(past)] if past else None
+        return growth_of(history.get(key, {}), today, days)
 
     # 급상승: 하루 증가량 기준 (기록이 이틀 이상 쌓여야 나온다)
     rising = sorted(((g, k) for k in history if (g := growth(k, 1)) and g > 0), reverse=True)
@@ -918,6 +960,10 @@ def main():
                 write_json(INDEX_PATH, idx)
         except Exception as e:  # noqa: BLE001
             log(f"! index.json에 AI 오류 기록 실패: {e}")
+        if is_budget_error(ai_error):
+            # 월 상한은 정해 둔 멈춤이라 실패로 표시하지 않는다(매 실행 실패 메일 방지). 화면 위 안내로만 알린다
+            log(f"::warning::{ai_error}")
+            return
         # 데이터는 저장했지만, Actions에서 실패로 표시해 메일 알림이 가게 한다
         log(f"::error::{ai_error}")
         sys.exit(1)

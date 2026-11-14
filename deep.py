@@ -261,30 +261,14 @@ def read_profile():
     return text[:3000]
 
 
-def deep_env():
-    """심층 분석용 모델로 chat_json을 부르기 위해 환경변수를 잠시 바꾼다."""
-    return {
-        "ANTHROPIC_MODEL": os.environ.get("ANTHROPIC_DEEP_MODEL") or core.DEFAULT_MODEL,
-        "ANTHROPIC_EFFORT": os.environ.get("ANTHROPIC_DEEP_EFFORT") or "high",
-    }
-
-
 def analyze(gh, full, hn_url=""):
     meta, material = gather(gh, full, hn_url)
     profile = read_profile()
     user = ("## 사용자 작업 프로필\n" + (profile or "(비어 있음)") + "\n\n" + material)
-    saved = {k: os.environ.get(k) for k in ("ANTHROPIC_MODEL", "ANTHROPIC_EFFORT")}
-    env = deep_env()
-    os.environ.update(env)
-    try:
-        result = normalize_deep(core.chat_json(DEEP_PROMPT, user, DEEP_SCHEMA))
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-    return meta, {"deep": result, "deep_model": env["ANTHROPIC_MODEL"],
+    model = os.environ.get("ANTHROPIC_DEEP_MODEL") or core.DEFAULT_MODEL
+    effort = os.environ.get("ANTHROPIC_DEEP_EFFORT") or "high"
+    result = normalize_deep(core.chat_json(DEEP_PROMPT, user, DEEP_SCHEMA, kind="deep", model=model, effort=effort))
+    return meta, {"deep": result, "deep_model": model,
                   "deep_at": core.today_kst().isoformat(), "deep_profile": bool(profile)}
 
 
@@ -452,6 +436,8 @@ if __name__ == "__main__":
         log(json.dumps(extra["deep"], ensure_ascii=False, indent=1)[:3000])
     else:
         e = run()
-        if e:
+        if e and not core.is_budget_error(e):
             log(f"::error::{e}")
             sys.exit(1)
+        if e:
+            log(f"::warning::{e}")

@@ -43,7 +43,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 - 카드나 상세 화면의 ☆를 누르면 관심 목록에 저장됩니다.
 - **★ 관심** 탭에서 저장한 라이브러리와 분류·태그·토픽·설명 키워드가 겹치거나, AI가 비슷한 도구로 꼽은 라이브러리를 추천합니다. 후보는 오늘 순위만이 아니라 지금까지 수집된 모든 저장소(`docs/data/catalog.json`)입니다.
 - 각 저장소 상세 화면 아래에도 "비슷한 라이브러리"가 나옵니다.
-- 관심 목록은 **각 기기의 브라우저에만** 저장됩니다. ★ 관심 탭 맨 아래 "다른 기기로 옮기기" 링크를 폰에서 열면 같은 목록을 가져옵니다.
+- 관심 목록은 브라우저에 바로 저장되고, hyperkwon.com에 로그인돼 있으면 포털(`/me/gittrend-saved`)에도 함께 저장되어 모든 기기에서 같은 목록이 보입니다. 로그인하지 않았으면 이 기기에만 남으며, ★ 관심 탭 맨 아래 "다른 기기로 옮기기" 링크로 옮길 수 있습니다.
 
 ## AI 홈
 
@@ -62,7 +62,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 
 각 구역의 **더 보기**나 위쪽 분류 칩을 누르면 그 분류의 전체 목록이 나오고, 검색하면 전체 목록에서 찾습니다.
 
-기사 오른쪽 위의 **☆**를 누르면 즐겨찾기에 저장되고, 위쪽 **★ 즐겨찾기** 칩에서 저장한 순서로 모아 볼 수 있습니다. 저장할 때 카드 내용까지 함께 보관하므로, 30일이 지나 목록에서 빠진 기사도 그대로 남습니다. 라이브러리 관심 목록처럼 **이 기기의 브라우저에만** 저장됩니다.
+기사 오른쪽 위의 **☆**를 누르면 즐겨찾기에 저장되고, 위쪽 **★ 즐겨찾기** 칩에서 저장한 순서로 모아 볼 수 있습니다. 저장할 때 카드 내용까지 함께 보관하므로, 30일이 지나 목록에서 빠진 기사도 그대로 남습니다. 라이브러리 관심 목록처럼 hyperkwon.com에 로그인돼 있으면 모든 기기에서 같은 목록이 보입니다.
 
 ### 수집 출처
 
@@ -80,7 +80,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 - SNS(X · Threads)는 API가 막혔거나 유료라 넣지 않았습니다. 우아한형제들(403)·요즘IT(405)는 GitHub Actions에서 접속을 막아 뺐습니다.
 
 - **판단:** 새 항목을 40건씩 묶어 한 번에 보내서 남길지(투자·소송·정책·홍보는 뺌), 같은 소식 묶기, 한국어 제목, 1~2문장 요약, 분류, 중요도(1~5)를 받습니다. 처리한 항목은 `data/news_seen.json`에 기록해 다시 보내지 않습니다.
-- **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준, 높음/보통/낮음)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 12)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
+- **카드:** 중요도 3 이상인 항목은 AI가 **원문(또는 릴리스 노트·모델 카드)을 읽고** 무엇인가 · 왜 주목받나 · 핵심 · 바로 써 보기(명령·코드) · 주의점 · 내 작업에 맞을까(`profile.md` 기준, 높음/보통/낮음)를 정리합니다. 제목을 누르면 페이지 안에서 펼쳐 읽고, 원문은 아래 작은 링크로만 엽니다. 한 번 만든 카드는 다시 만들지 않으며, 실행마다 최대 `MAX_NEWS_CARDS`개(기본 30)를 만듭니다. 원문을 막아 둔 사이트(예: OpenAI)는 피드 요약문만으로 정리합니다.
 - "오늘의 AI 레이더" 요약은 하루 한 번 만듭니다. 수집은 **매일 2번**(한국시간 오전 7시·오후 6시) 돌고, 그 밖에도 요청할 수 있습니다: 화면 맨 위 막대의 **[지금 업데이트]** 버튼(제목 `update` 이슈를 열면 수집 후 댓글 달고 닫힘, 저장소 주인만) 또는 Actions의 Run workflow. 최근 30일치를 보여줍니다.
 
 ## 구조
@@ -100,7 +100,7 @@ docs/                         대시보드 (GitHub Pages로 배포되는 폴더)
 data/history.json             날짜별 star 기록 (60일 보관)
 data/meta.json                저장소 상세 정보 캐시
 data/news_seen.json           AI로 처리한 항목 기록 (다시 보내지 않기 위함)
-data/ai_usage.json            월별 Claude 토큰·호출 수 (AI_MONTHLY_TOKENS 상한 판정)
+data/ai_usage.json            월별 Claude 토큰·호출 수와 종류별(summary·digest·news_judge·news_card·news_brief·deep) 합계 (AI_MONTHLY_TOKENS 상한 판정)
 .github/workflows/update.yml  매일 2번 수집 → 배포 (그 밖에 Run workflow·심층 분석 이슈)
 ```
 
@@ -119,10 +119,10 @@ data/ai_usage.json            월별 Claude 토큰·호출 수 (AI_MONTHLY_TOKEN
 2. 저장소 **Settings → Secrets and variables → Actions**
    - Secrets 탭: `ANTHROPIC_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
    - Variables 탭 (선택): `ANTHROPIC_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_EFFORT` (기본 `medium`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
-     `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_DEEP_EFFORT` (기본 `high`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 30), `AI_MONTHLY_TOKENS` (기본 300만, 한 달 토큰 상한 — `data/ai_usage.json`에 누적)
+     `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_DEEP_EFFORT` (기본 `high`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 30), `AI_MONTHLY_TOKENS` (기본 800만, 한국 시간 한 달 토큰 상한 — `data/ai_usage.json`에 누적. 상한에 닿으면 AI 작업만 다음 달까지 쉬고, 실행은 실패로 표시하지 않고 화면 위에 안내합니다)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
-   끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로도 갱신하고 싶을 때 같은 버튼으로 실행합니다(자동 갱신 없음).
+   끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로는 매일 2번(한국시간 오전 7시·오후 6시) 자동으로 수집하고, 바로 받고 싶으면 같은 버튼이나 화면의 [지금 업데이트]를 씁니다.
 5. 폰에서는 이 주소를 열고 "홈 화면에 추가"를 하면 앱처럼 쓸 수 있습니다.
 
 - 무료 계정의 GitHub Pages는 공개 페이지입니다. 검색엔진에는 노출되지 않도록 `noindex`를 넣어 두었습니다.

@@ -59,6 +59,7 @@ jobs:
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
           MAX_NEWS_CARDS: ${{ vars.MAX_NEWS_CARDS }}
+          AI_MONTHLY_TOKENS: ${{ vars.AI_MONTHLY_TOKENS }}
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: python collect.py
 
@@ -78,6 +79,7 @@ jobs:
           MAX_SUMMARIES: ${{ vars.MAX_SUMMARIES }}
           MAX_NEWS_AI: ${{ vars.MAX_NEWS_AI }}
           MAX_NEWS_CARDS: ${{ vars.MAX_NEWS_CARDS }}
+          AI_MONTHLY_TOKENS: ${{ vars.AI_MONTHLY_TOKENS }}
         run: python deep.py
 
       - name: Commit data

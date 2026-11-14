@@ -48,7 +48,7 @@ class ChatJsonTests(unittest.TestCase):
         self.assertEqual(sent["model"], collect.DEFAULT_MODEL)
         self.assertEqual(sent["fallbacks"], "default")
         self.assertEqual(sent["output_config"]["format"]["schema"], collect.DIGEST_SCHEMA)
-        add.assert_called_once_with(18)
+        add.assert_called_once_with(18, "")
 
     def test_refusal_and_cutoff_are_errors_not_data(self):
         for reason in ("refusal", "max_tokens"):
@@ -232,7 +232,7 @@ class KoBlogTests(unittest.TestCase):
 
 
 class CollectorTests(unittest.TestCase):
-    def run_collector(self, api_result, trending=False, fatal_digest=False):
+    def run_collector(self, api_result, trending=False, fatal_digest=False, budget=False):
         today = collect.today_kst().isoformat()
         yesterday = (collect.today_kst() - dt.timedelta(days=1)).isoformat()
         files = {
@@ -248,7 +248,7 @@ class CollectorTests(unittest.TestCase):
         def read(path, default):
             if path.endswith("acme__tool.json"):
                 return {"summary": {"one_liner": "test"}}
-            return files.get(path, default)
+            return output.get(path, files.get(path, default))  # 이번 실행에서 쓴 파일은 쓴 내용을 읽는다
 
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {
@@ -269,7 +269,8 @@ class CollectorTests(unittest.TestCase):
             digest = stack.enter_context(patch.object(collect, "make_digest",
                 side_effect=collect.AIFatal("mock invalid key") if fatal_digest else None,
                 return_value={"headline": "test", "themes": []}))
-            news_run = stack.enter_context(patch.object(news, "run", return_value=""))
+            news_run = stack.enter_context(patch.object(
+                news, "run", return_value=collect.BUDGET_PREFIX + "에 닿았습니다" if budget else ""))
             deep_run = stack.enter_context(patch.object(deep, "run", return_value=""))
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             if fatal_digest:
@@ -308,6 +309,10 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(files[collect.INDEX_PATH]["ai_error"], "mock invalid key")
         self.assertIn("acme/tool", files[collect.INDEX_PATH]["repos"])
 
+    def test_monthly_budget_is_reported_but_not_a_failure(self):
+        files, _, _ = self.run_collector(None, trending=True, budget=True)  # SystemExit 없이 끝나야 한다
+        self.assertTrue(collect.is_budget_error(files[collect.INDEX_PATH]["ai_error"]))
+
 
 class RequestTests(unittest.TestCase):
     def test_only_owner_requests_are_accepted(self):
@@ -344,20 +349,67 @@ class UsageTests(unittest.TestCase):
         return patch.object(collect.anthropic, "Anthropic", return_value=client), client
 
     def test_usage_is_added_per_call(self):
-        patcher, _ = self.client(300, 200)
+        patcher, _ = self.client(300, 200, 50)
         with patcher:
-            collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
+            collect.chat_json("s", "u", collect.DIGEST_SCHEMA, kind="digest")
+            collect.chat_json("s", "u", collect.DIGEST_SCHEMA, kind="digest")
             collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
         month = self.files[collect.AI_USAGE_PATH][collect._month_kst()]
-        self.assertEqual(month, {"tokens": 500, "calls": 2})
+        self.assertEqual(month, {"tokens": 550, "calls": 3,
+                                 "by_kind": {"digest": {"tokens": 500, "calls": 2}}})
 
     def test_stops_before_calling_when_limit_is_reached(self):
         self.files[collect.AI_USAGE_PATH] = {collect._month_kst(): {"tokens": 1000, "calls": 3}}
         patcher, client = self.client()
         with patcher:
-            with self.assertRaises(collect.AIFatal):
+            with self.assertRaises(collect.AIFatal) as err:
                 collect.chat_json("s", "u", collect.DIGEST_SCHEMA)
         client.beta.messages.stream.assert_not_called()
+        self.assertTrue(collect.is_budget_error(str(err.exception)))
+
+    def test_model_and_effort_can_be_given_per_call(self):
+        patcher, client = self.client(10)
+        with patcher:
+            collect.chat_json("s", "u", collect.DIGEST_SCHEMA, model="m-deep", effort="high")
+        sent = client.beta.messages.stream.call_args.kwargs
+        self.assertEqual(sent["model"], "m-deep")
+        self.assertEqual(sent["output_config"]["effort"], "high")
+
+
+class GrowthTests(unittest.TestCase):
+    """급상승(2026-11-14): 오래된 기록과 비교해 며칠치 증가를 '어제보다'로 보이지 않게 한다."""
+    today = dt.date(2026, 11, 14)
+
+    def test_daily_growth_needs_yesterdays_record(self):
+        self.assertEqual(collect.growth_of({"2026-11-13": 100, "2026-11-14": 150}, self.today, 1), 50)
+        self.assertIsNone(collect.growth_of({"2026-11-12": 100, "2026-11-14": 150}, self.today, 1))
+        self.assertIsNone(collect.growth_of({"2026-10-20": 10, "2026-11-14": 5000}, self.today, 1))
+
+    def test_weekly_growth_allows_a_short_gap(self):
+        self.assertEqual(collect.growth_of({"2026-11-05": 100, "2026-11-14": 300}, self.today, 7), 200)
+        self.assertIsNone(collect.growth_of({"2026-11-01": 100, "2026-11-14": 300}, self.today, 7))
+
+
+class RateLimitTests(unittest.TestCase):
+    """GitHub 403(2026-11-14): 한도일 때만 그 실행의 core API를 멈춘다."""
+
+    def error(self, code, remaining=None, body=b""):
+        headers = {"X-RateLimit-Remaining": remaining} if remaining is not None else {}
+        return collect.urllib.error.HTTPError("https://api.github.com/x", code, "x", headers, io.BytesIO(body))
+
+    def test_blocked_repository_does_not_stop_other_calls(self):
+        gh = collect.GitHub("mock")
+        with patch.object(collect, "http_get", side_effect=self.error(403, "4000", b'{"message":"Repository access blocked"}')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertIsNone(gh.api("/repos/bad/repo"))
+        self.assertFalse(gh.core_blocked)
+
+    def test_rate_limit_stops_core_calls(self):
+        for err in (self.error(403, "0"), self.error(403, None, b"API rate limit exceeded"), self.error(429)):
+            gh = collect.GitHub("mock")
+            with patch.object(collect, "http_get", side_effect=err), contextlib.redirect_stdout(io.StringIO()):
+                gh.api("/repos/a/b")
+            self.assertTrue(gh.core_blocked)
 
 
 if __name__ == "__main__":

@@ -1330,7 +1330,7 @@
       </div>`;
     const more = rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : "";
     const feed = newsState.saved ? `
-      ${descHtml("news:saved", "☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. 이 기기 브라우저에만 저장돼요.")}
+      ${descHtml("news:saved", "☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. hyperkwon.com에 로그인돼 있으면 모든 기기에서 같은 목록이 보여요.")}
       ${body}
       ${more}
       ${transferHtml()}` : `
@@ -1560,7 +1560,7 @@
     return newsLoad;
   }
 
-  // 수집은 요청할 때만 한다(2026-10-27, 정기 실행 없음). 그래서 오래된 데이터는 알리지 않고, AI 정리 실패만 화면 위에 알린다.
+  // 수집은 매일 2번(한국시간 7시·18시) + [지금 업데이트] 요청 때. 오래된 데이터는 알리지 않고, AI 정리 실패·월 상한만 화면 위에 알린다.
   const statusNotes = {};
   function setStatusNote(key, text) {
     statusNotes[key] = text;
@@ -1582,7 +1582,7 @@
       const updated = document.getElementById("updated");
       updated.textContent =
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-      // 수집은 요청할 때만 한다(2026-10-27). 제목 "update" 이슈를 열면 Actions가 수집하고 이슈를 닫는다(저장소 주인만).
+      // 정기 수집 외에 바로 받고 싶을 때: 제목 "update" 이슈를 열면 Actions가 수집하고 이슈를 닫는다(저장소 주인만).
       const base = repoUrl();
       if (base) {
         const body = "GitTrend 데이터를 지금 업데이트해 주세요.\n\n" +
@@ -1597,7 +1597,9 @@
         }
       }
       const notes = [];
-      if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(Claude API 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
+      // collect.py BUDGET_PREFIX와 같은 문구로 월 상한 멈춤을 가려낸다
+      if (String(d.ai_error || "").startsWith("이번 달 AI 토큰 상한")) notes.push("이번 달 AI 토큰 상한에 닿아 새 AI 정리를 쉬고 있어요. 다음 달 1일에 다시 시작해요.");
+      else if (d.ai_error) notes.push("이번 수집에서 AI 정리가 일부 실패했어요(Claude API 한도·오류 가능성). 요약이 빠진 항목이 있을 수 있어요.");
       setStatusNote("index", notes.join(" "));
       route();
       runSync();

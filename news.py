@@ -497,7 +497,7 @@ def ai_judge(batch):
         if a.get("snippet"):
             line += f" / {a['snippet'][:500]}"
         lines.append(line)
-    d = core.chat_json(NEWS_PROMPT, "\n".join(lines), NEWS_SCHEMA)
+    d = core.chat_json(NEWS_PROMPT, "\n".join(lines), NEWS_SCHEMA, kind="news_judge")
     if not isinstance(d, dict) or not isinstance(d.get("items"), list):
         raise ValueError("뉴스 정리 응답 형식이 올바르지 않습니다")
     result = {}
@@ -534,7 +534,7 @@ def ai_card(a, body, profile):
     user = (f"## 사용자 작업 프로필\n{profile or '(비어 있음)'}\n\n"
             f"## 항목\n제목: {a['title']}\n출처: {a['source']}\n분류: {a.get('kind', '')}\n"
             f"요약문: {a.get('snippet', '')}\n\n## 본문\n{body or '(본문 없음 — 제목과 요약문만으로 정리)'}")
-    d = core.chat_json(CARD_PROMPT, user, CARD_SCHEMA)
+    d = core.chat_json(CARD_PROMPT, user, CARD_SCHEMA, kind="news_card")
     if not isinstance(d, dict) or not core._text(d.get("what")):
         raise ValueError("카드 응답 형식이 올바르지 않습니다")
     t = d.get("try") if isinstance(d.get("try"), dict) else {}
@@ -557,7 +557,7 @@ def ai_card(a, body, profile):
 def ai_brief(articles):
     lines = [f"[{a['id']}] ({a.get('kind', '')}, {a.get('importance', 2)}) "
              f"{a.get('title_ko') or a['title']} — {a.get('summary', '')}" for a in articles]
-    d = core.chat_json(BRIEF_PROMPT, "\n".join(lines), BRIEF_SCHEMA)
+    d = core.chat_json(BRIEF_PROMPT, "\n".join(lines), BRIEF_SCHEMA, kind="news_brief")
     if not isinstance(d, dict) or not core._text(d.get("headline")):
         raise ValueError("뉴스 브리핑 응답 형식이 올바르지 않습니다")
     valid = {a["id"] for a in articles}
@@ -713,6 +713,8 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     core.load_dotenv()
     err = run()
-    if err:
+    if err and not core.is_budget_error(err):
         log(f"::error::{err}")
         sys.exit(1)
+    if err:
+        log(f"::warning::{err}")
