@@ -520,11 +520,12 @@ def chat_json(system, user, schema, kind="", model=None, effort=None):
         raise AIFatal(f"모델 '{model}'을(를) 쓸 수 없습니다 (404). ANTHROPIC_MODEL을 확인하세요.") from e
     except anthropic.BadRequestError as e:
         if re.search(r"credit balance|usage limits", e.message, re.I):
-            raise AIFatal("Claude API 크레딧이 없거나 지출 한도에 닿았습니다. Console의 Billing을 확인하세요.") from e
+            # 조직 잔액이 남아도 워크스페이스 한도에 걸리면 같은 400이 온다 — 원문을 같이 남겨 어느 쪽인지 가린다
+            raise AIFatal(f"Claude API 크레딧이 없거나 지출 한도에 닿았습니다. Console의 Billing·Workspaces 한도를 확인하세요. (원문: {e.message[:300]})") from e
         raise RuntimeError(f"Claude API 400: {e.message[:300]}") from e
     except anthropic.RateLimitError as e:
         if "usage limits" in e.message:
-            raise AIFatal("Claude API 월 지출 상한에 닿았습니다. Console의 Billing을 확인하세요.") from e
+            raise AIFatal(f"Claude API 월 지출 상한에 닿았습니다. Console의 Billing을 확인하세요. (원문: {e.message[:300]})") from e
         raise RuntimeError(f"Claude API 429: {e.message[:300]}") from e
     except anthropic.APIError as e:
         raise RuntimeError(f"Claude API 호출 실패: {e}") from e
