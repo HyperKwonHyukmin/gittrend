@@ -12,7 +12,7 @@ README뿐 아니라 패키지 설정, 대표 소스, docs/examples, 댓글 많�
      (페이지의 [심층 분석 요청] 버튼이 이 이슈를 만든다. 분석 후 댓글을 달고 닫는다)
 
 환경변수:
-  ANTHROPIC_DEEP_MODEL    기본 claude-opus-5-5
+  ANTHROPIC_DEEP_MODEL    기본 claude-sonnet-5-5
   ANTHROPIC_DEEP_EFFORT   기본 high
   DEEP_PER_RUN            자동 분석 개수 (기본 1, 0이면 끔)
   GITHUB_REPOSITORY       Actions가 넣어 준다 (owner/repo). 요청 이슈를 읽고 댓글을 다는 데 쓴다.

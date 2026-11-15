@@ -85,6 +85,13 @@
 앱별 AI 토큰 상한, 데이터 파일 정리(1년 약 100MB, 지금 `docs/data` 5.7MB), 수집 0개면 실패 처리, 지난 저장소까지 검색.
 위 1~2단계가 끝난 뒤 따로 정한다.
 
+## 2026-11-15 기본 모델을 Sonnet 5.5로
+
+- 11월 중순 워크스페이스 지출 한도(400 `workspace API usage limits`)에 걸려 AI 정리가 멈췄다. 11/1~15에 754만 토큰.
+- 기본 모델(요약·심층 모두)을 `claude-opus-5-5`($4/$20) → `claude-sonnet-5-5`($2/$10)로 바꿔 토큰 단가를 절반으로. 되돌리려면 Variables의 `ANTHROPIC_MODEL`·`ANTHROPIC_DEEP_MODEL`.
+- 같은 돈으로 두 배를 쓸 수 있어 `AI_MONTHLY_TOKENS`를 1,600만으로 올림(Variables).
+- 크레딧·한도 오류 안내에 API 원문을 붙인다 — 조직 잔액과 워크스페이스 한도를 가리기 위해.
+
 ## 2026-11-14 전체 코드 검토에서 고친 것
 
 - **월 토큰 상한:** 11월 14일에 7,372,500 / 8,000,000(92%). `update.yml`이 `AI_MONTHLY_TOKENS`를 넘기지 않아 Variables 값이 무시되던 것을 고침.
@@ -95,6 +102,6 @@
 - **심층 분석 모델:** `os.environ`을 바꾸지 않고 `chat_json(model=, effort=)`로 넘긴다.
 - 하지 않은 것(영향 작음): concurrency로 취소된 "update" 이슈가 열린 채 남는 문제, Hugging Face 항목이 14일 뒤 다시 판단되는 문제.
 - 남은 일 (2026-11-14 기준):
-  - [ ] GitHub Variables에 `AI_MONTHLY_TOKENS` 넣기(사용자 직접). 넣지 않으면 기본 800만에서 11월 중순에 멈춘다.
+  - [x] GitHub Variables에 `AI_MONTHLY_TOKENS` 넣기 — 2026-11-15 1,600만. 넣지 않으면 기본 800만에서 11월 중순에 멈춘다.
   - [ ] 2026-12 초: `data/ai_usage.json`의 11월 `by_kind`를 보고 줄일 곳(카드 수 `MAX_NEWS_CARDS`, 심층 분석 `DEEP_PER_RUN`, 자료 길이 등)을 정한다.
     by_kind는 2026-11-14 배포 뒤부터만 쌓이므로 11월 값은 절반쯤만 있다.

@@ -10,7 +10,7 @@ AI 정리는 저장소마다 한 번만 만들어 docs/data/repos/<저장소>.js
 
 환경변수 (또는 프로젝트 루트의 .env 파일):
   ANTHROPIC_API_KEY 없으면 AI 정리를 건너뛴다
-  ANTHROPIC_MODEL   기본 claude-opus-5-5
+  ANTHROPIC_MODEL   기본 claude-sonnet-5-5
   ANTHROPIC_EFFORT  low / medium / high, 기본 medium
   GITHUB_TOKEN      없어도 동작하지만, 있으면 상세 정보·릴리스·star 추적이 풍부해진다
   MAX_SUMMARIES     한 번 실행에 새로 정리할 최대 개수 (기본 60)
@@ -370,7 +370,7 @@ def clean_readme(text, limit=30000):
 
 # ---------------------------------------------------------------- AI
 
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"  # 2026-11-15 비용 절반을 위해 Opus 5.5에서 바꿈
 
 
 class AIFatal(Exception):

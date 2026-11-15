@@ -23,11 +23,11 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 
 ## 심층 분석
 
-기본 정리는 `claude-opus-5-5`(추론 `medium`)로 모든 라이브러리에 붙이고, 그 위에 **심층 분석**을 더합니다.
+기본 정리는 `claude-sonnet-5-5`(추론 `medium`)로 모든 라이브러리에 붙이고, 그 위에 **심층 분석**을 더합니다.
 
 - AI가 README뿐 아니라 **패키지 설정, 대표 소스, docs·examples, 댓글 많은 이슈, Hacker News 댓글, 최근 릴리스**까지 읽습니다.
 - 정리하는 내용: 결론, **내 작업에 맞을까?**(`profile.md` 기준), 동작 원리, **주요 API·메서드**, 할 수 있는 것, **사람들은 이렇게 써요**, 커뮤니티 반응(좋은 점·불만·자주 묻는 질문), 성숙도, 대안과 비교, 시작하기, 도입 전 확인할 점
-- 모델: `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`, 추론 `high`)
+- 모델: `ANTHROPIC_DEEP_MODEL` (기본 `claude-sonnet-5-5`, 추론 `high`)
 - 분석은 라이브러리마다 **한 번만** 하고 영구 보관합니다.
 
 언제 분석하나:
@@ -36,7 +36,7 @@ GitHub에서 요즘 주목받는 라이브러리를 모아서, AI(Claude API)가
 
 `profile.md`에 하시는 작업을 적어 두면 "내 작업에 맞을까?"를 그 기준으로 판단합니다. 공개 저장소라 이 파일도 공개된다는 점에 주의하세요.
 
-비용(대략): 한 건에 입력 2~4만 토큰 + 출력·추론 1만 토큰 안팎이라 `claude-opus-5-5` 기준 한 건에 $0.3~0.4쯤으로 예상합니다.
+비용(대략): 한 건에 입력 2~4만 토큰 + 출력·추론 1만 토큰 안팎이라 `claude-sonnet-5-5` 기준 한 건에 $0.15~0.2쯤으로 예상합니다.
 
 ## 관심 목록과 추천
 
@@ -118,8 +118,8 @@ data/ai_usage.json            월별 Claude 토큰·호출 수와 종류별(summ
 1. GitHub에 **Public** 저장소를 만들고 이 폴더를 올립니다. (`.env`는 `.gitignore`에 있어서 올라가지 않습니다.)
 2. 저장소 **Settings → Secrets and variables → Actions**
    - Secrets 탭: `ANTHROPIC_API_KEY` 추가 (선택: 국내 블로그 수집용 `KAKAO_REST_API_KEY`)
-   - Variables 탭 (선택): `ANTHROPIC_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_EFFORT` (기본 `medium`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
-     `ANTHROPIC_DEEP_MODEL` (기본 `claude-opus-5-5`), `ANTHROPIC_DEEP_EFFORT` (기본 `high`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 30), `AI_MONTHLY_TOKENS` (기본 800만, 한국 시간 한 달 토큰 상한 — `data/ai_usage.json`에 누적. 상한에 닿으면 AI 작업만 다음 달까지 쉬고, 실행은 실패로 표시하지 않고 화면 위에 안내합니다)
+   - Variables 탭 (선택): `ANTHROPIC_MODEL` (기본 `claude-sonnet-5-5`), `ANTHROPIC_EFFORT` (기본 `medium`), `MAX_SUMMARIES` (기본 60), `MAX_NEWS_AI` (기본 160),
+     `ANTHROPIC_DEEP_MODEL` (기본 `claude-sonnet-5-5`), `ANTHROPIC_DEEP_EFFORT` (기본 `high`), `DEEP_PER_RUN` (기본 1), `MAX_NEWS_CARDS` (기본 30), `AI_MONTHLY_TOKENS` (기본 800만, 한국 시간 한 달 토큰 상한 — `data/ai_usage.json`에 누적. 상한에 닿으면 AI 작업만 다음 달까지 쉬고, 실행은 실패로 표시하지 않고 화면 위에 안내합니다)
 3. **Settings → Pages → Source**를 `GitHub Actions`로 바꿉니다.
 4. **Actions 탭 → Update trends → Run workflow**로 처음 한 번 실행합니다.
    끝나면 `https://<아이디>.github.io/<저장소이름>/` 에서 볼 수 있습니다. 그 뒤로는 매일 2번(한국시간 오전 7시·오후 6시) 자동으로 수집하고, 바로 받고 싶으면 같은 버튼이나 화면의 [지금 업데이트]를 씁니다.
