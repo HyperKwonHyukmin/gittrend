@@ -78,6 +78,13 @@ button { font: inherit; color: inherit; }
   background: var(--accent); color: #fff; font-size: 17px;
 }
 .brand-name { font-weight: 800; font-size: 19px; letter-spacing: -.02em; }
+/* 데이터 수집 시각(브랜드 옆, 작게) */
+.updated-top {
+  flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.updated-top[hidden] { display: none; }
 .search {
   flex: 1; max-width: 420px; margin-left: auto;
   display: flex; align-items: center; gap: 8px;
@@ -569,6 +576,7 @@ details.basic > summary { cursor: pointer; font-weight: 700; color: var(--ink-2)
   .wrap { padding: 0 16px; }
   .top-inner { padding: 10px 16px; gap: 10px; flex-wrap: wrap; }
   .brand-name { display: none; }
+  .updated-top { font-size: 11.5px; padding: 2px 7px; }
   .sections { margin-left: auto; }
   .sec { padding: 6px 13px; }
   .search { max-width: none; height: 38px; flex: 1 1 calc(100% - 150px); margin-left: 0; }

@@ -1582,6 +1582,14 @@
       const updated = document.getElementById("updated");
       updated.textContent =
         `마지막 업데이트 ${t.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      // 상단 막대에도 같은 시각(짧게): "11월 18일 09:01"
+      const top = document.getElementById("updated-top");
+      if (top && !isNaN(t)) {
+        const hm = t.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+        top.textContent = `${t.getMonth() + 1}월 ${t.getDate()}일 ${hm} 업데이트`;
+        top.title = updated.textContent;
+        top.hidden = false;
+      }
       // 정기 수집 외에 바로 받고 싶을 때: 제목 "update" 이슈를 열면 Actions가 수집하고 이슈를 닫는다(저장소 주인만).
       const base = repoUrl();
       if (base) {
