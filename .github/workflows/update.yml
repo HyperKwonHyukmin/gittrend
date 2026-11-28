@@ -111,6 +111,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: docs
+      # 방금 올린 묶음이 GitHub 목록에 잡히기 전에 배포가 찾으면 "No artifacts named github-pages"로 실패한다(2026-11-28 두 번). 잠깐 기다린다.
+      - name: Wait for artifact
+        run: sleep 15
       - id: deploy
         uses: actions/deploy-pages@v4
 
