@@ -913,6 +913,8 @@
     const own = isOwner();
     const idea = document.getElementById("idea-btn");
     if (idea) idea.hidden = !own;
+    const stats = document.getElementById("stats-btn"); // 방문자 통계(포털 /me/trend/)
+    if (stats) stats.hidden = !own;
     const links = document.getElementById("owner-links"); // 바닥글의 Claude API 사용량·잔액 바로가기
     if (links) links.hidden = !own;
     const upd = document.getElementById("update-btn");
