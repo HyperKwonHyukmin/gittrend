@@ -111,7 +111,7 @@ button { font: inherit; color: inherit; }
 /* 지금 업데이트: 상단에서 눈에 띄게(강조색) */
 .update-btn { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .update-btn:hover, .update-btn:focus-visible { background: var(--accent); border-color: var(--accent); color: #fff; }
-.update-btn[hidden] { display: none; }
+.update-btn[hidden], .idea-btn[hidden], .foot-links[hidden] { display: none; }
 
 /* ---------- 탭 */
 .tabs {

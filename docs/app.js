@@ -5,7 +5,7 @@
   // 주소는 예전처럼 목록 id(#/t/daily, #/t/new7 …)를 그대로 써서 예전 링크도 열린다.
   const TABS = [
     { id: "hot", label: "종합 주목", desc: "아래 목록을 모두 합쳐서, 여러 곳에서 동시에 뜨는 저장소일수록 위로 올렸어요." },
-    { id: "saved", label: "★ 관심", desc: "☆를 눌러 저장한 라이브러리와, 그와 비슷한 라이브러리 추천이에요. hyperkwon.com에 로그인돼 있으면 모든 기기에서 같은 목록이 보여요." },
+    { id: "saved", label: "★ 관심", desc: "☆를 눌러 저장한 라이브러리와, 그와 비슷한 라이브러리 추천이에요. 이 브라우저에 저장돼요." },
     { id: "trend", label: "트렌딩", views: ["daily", "weekly", "monthly"], desc: "GitHub Trending 기준, 고른 기간(오늘·이번 주·이번 달) 동안 star를 많이 받은 저장소예요." },
     { id: "new", label: "새로 뜬", views: ["new7", "new30"], desc: "고른 기간(7일·30일) 안에 만들어졌는데 벌써 star가 많이 쌓인 저장소예요." },
     { id: "hn", label: "HN 화제", desc: "개발자 커뮤니티 Hacker News에서 이번 주 추천과 댓글을 많이 받은 GitHub 저장소예요." },
@@ -385,7 +385,8 @@
   //   #/import/<라이브러리,…>&n=<소식 id,…>   (&n= 부분이 없는 예전 링크도 그대로 열림)
   function transferHtml() {
     if (sync.state === "synced") return `<p class="sync-note">✓ hyperkwon.com에 저장돼 있어요. 다른 PC·휴대폰에서도 같은 목록이 보여요.</p>`;
-    const login = sync.state === "signed-out"
+    const login = !isOwner() ? ""
+      : sync.state === "signed-out"
       ? `<p class="sync-note">지금은 이 브라우저에만 저장돼요. <a href="https://hyperkwon.com/me/" target="_blank" rel="noopener">hyperkwon.com에 로그인</a>한 뒤 이 화면을 다시 열면 모든 기기에서 같은 목록을 써요.</p>`
       : sync.state === "error" ? `<p class="sync-note">공통 목록에 연결하지 못해 이 브라우저에만 저장했어요. 다음에 열 때 다시 올려요.</p>` : "";
     const repoKeys = Object.keys(saved);
@@ -618,7 +619,7 @@
 
   function requestHtml(r) {
     const base = repoUrl();
-    if (!base) return "";
+    if (!base || !isOwner()) return ""; // 요청 이슈는 주인 것만 처리되므로 방문자에게는 버튼을 보이지 않는다
     const body = "이 라이브러리를 심층 분석해 주세요.\n\n" +
       "제목을 바꾸지 말고 그대로 [Create] 버튼을 누르면 됩니다.\n" +
       "몇 분 뒤 분석이 끝나면 이 이슈에 댓글이 달리고 자동으로 닫혀요.";
@@ -676,9 +677,9 @@
         ${fit.level || fit.reason ? `
         <div class="fit">
           <div class="fit-head">
-            <b>내 작업에 맞을까?</b>
+            <b>${isOwner() ? "내 작업에 맞을까?" : "운영자 작업에 맞을까?"}</b>
             ${fit.level ? `<span class="fit-level ${LEVEL_CLASS[fit.level] || ""}">${esc(fit.level)}</span>` : ""}
-            <small>${d.deep_profile ? "profile.md 기준" : "일반 개발자 기준"}</small>
+            <small>${d.deep_profile ? (isOwner() ? "profile.md 기준" : "운영자(조선 구조해석 엔지니어) 기준") : "일반 개발자 기준"}</small>
           </div>
           ${fit.reason ? `<p>${esc(fit.reason)}</p>` : ""}
           <div class="fit-grid">
@@ -885,6 +886,38 @@
     ? "http://localhost:8799/me/gittrend-saved" : "https://hyperkwon.com/me/gittrend-saved";
   const SYNC_ID = { repo: /^[\w.-]+\/[\w.-]+$/, news: /^[0-9a-f]{6,40}$/ };
   const sync = { state: "idle", busy: false, again: false, timer: 0, at: 0 }; // state: idle | synced | signed-out | error
+
+  // ------------------------------------------------------------ 주인 / 방문자 (2026-11-28 공개 준비)
+  // 포털 동기화가 한 번이라도 성공한 브라우저 = 주인. 방문자는 포털에 로그인할 수 없어 늘 signed-out이다.
+  // 화면 표시만 가르는 것이지 접근 제어가 아니다(데이터 JSON은 누구나 받을 수 있다).
+  const isOwner = () => sync.state === "synced" || store.get("gittrend:owner", false) === true;
+  // 개인 글·언론 기사는 방문자에게 AI 상세 카드 대신 한 줄 요약 + 원문 링크만 보인다(원문 방문을 대신하지 않게).
+  const PERSONAL_ORIGINS = new Set(["국내 블로그", "dev.to", "Reddit", "Lobsters", "Hacker News",
+    "Simon Willison", "Latent Space", "바이라인네트워크"]);
+  const cardOf = a => a.card && (isOwner() || !PERSONAL_ORIGINS.has(a.origin)) ? a.card : null;
+  // 방문자 집계(2026-11-28): 화면이 바뀔 때마다 포털 공개 주소로 화면 주소만 알린다(주인 브라우저는 보내지 않음).
+  // 쿠키 없음·응답 안 읽음(no-cors, text/plain). 포털은 날짜별 합계만 남긴다(hyperkwon-portal src/trend-visits.js).
+  const HIT_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://localhost:8799/hit/trend" : "https://hyperkwon.com/hit/trend";
+  const hitState = { last: "", at: 0, ref: document.referrer || "" };
+  function sendHit() {
+    if (isOwner()) return;
+    const path = location.hash || "#/";
+    if (path === hitState.last && Date.now() - hitState.at < 3000) return;
+    hitState.last = path; hitState.at = Date.now();
+    const body = JSON.stringify({ path, ref: hitState.ref || undefined });
+    hitState.ref = ""; // 유입 사이트는 처음 한 번만
+    try { fetch(HIT_URL, { method: "POST", mode: "no-cors", credentials: "omit", keepalive: true, headers: { "Content-Type": "text/plain" }, body }).catch(() => {}); } catch (_) { /* 집계 실패는 무시 */ }
+  }
+  function applyOwner() {
+    const own = isOwner();
+    const idea = document.getElementById("idea-btn");
+    if (idea) idea.hidden = !own;
+    const links = document.getElementById("owner-links"); // 바닥글의 Claude API 사용량·잔액 바로가기
+    if (links) links.hidden = !own;
+    const upd = document.getElementById("update-btn");
+    if (upd && upd.getAttribute("href")) upd.hidden = !own;
+  }
   let pending = store.get("gittrend:pending", []);
   if (!Array.isArray(pending)) pending = [];
   const opKey = o => `${o.kind}:${o.id}`;
@@ -935,6 +968,7 @@
       store.set("gittrend:saved", saved);
       store.set("gittrend:newsSaved", savedNews);
       sync.state = "synced";
+      if (!store.get("gittrend:owner", false)) { store.set("gittrend:owner", true); applyOwner(); if (data) route(); }
     } catch (_) {
       sync.state = "error";
     } finally {
@@ -1022,7 +1056,7 @@
       if (newsState.important && !(a.importance >= 4)) return false;
       if (newsState.unread && !newsState.saved && readNews.has(a.id)) return false;
       if (!q) return true;
-      const c = a.card || {};
+      const c = cardOf(a) || {};
       return [a.title, a.title_ko, a.summary, a.snippet, a.source, a.kind, c.what, c.why, ...(c.points || [])]
         .join(" ").toLowerCase().includes(q);
     });
@@ -1052,7 +1086,7 @@
         ${(c.points || []).length ? `<div class="rc-block"><b>핵심</b>${listHtml(c.points)}</div>` : ""}
         ${t.desc || t.code ? `<div class="rc-block"><b>바로 써 보기</b>${t.desc ? `<p>${esc(t.desc)}</p>` : ""}${codeBlock("", t.lang, t.code)}</div>` : ""}
         ${(c.caveats || []).length ? `<div class="rc-block"><b>주의점</b>${listHtml(c.caveats)}</div>` : ""}
-        ${c.fit ? `<div class="rc-fit"><b>내 작업에 맞을까?</b><p>${esc(c.fit)}</p></div>` : ""}
+        ${c.fit && isOwner() ? `<div class="rc-fit"><b>내 작업에 맞을까?</b><p>${esc(c.fit)}</p></div>` : ""}
         <p class="rc-note">${c.from_body ? "원문을 읽고 AI가 정리했어요." : "원문을 읽지 못해 제목과 요약문만으로 정리했어요."} 틀린 내용이 있을 수 있어요.</p>
       </div>`;
   }
@@ -1065,7 +1099,7 @@
       <div class="news-meta">
         ${imp >= 4 ? '<span class="badge-hot">주요</span>' : ""}
         ${a.kind ? `<span class="chip cat">${KIND_ICON[a.kind] || ""} ${esc(a.kind)}</span>` : ""}
-        ${a.card?.fit_level === "높음" ? '<span class="fit-chip">내 작업에 딱</span>' : ""}
+        ${isOwner() && a.card?.fit_level === "높음" ? '<span class="fit-chip">내 작업에 딱</span>' : ""}
         <span class="news-src">${esc(a.source)}</span>
         <span>${timeText(a.published)}</span>
         ${a.ai ? `<span class="imp" title="중요도 ${imp}/5">${"●".repeat(imp)}<i>${"●".repeat(5 - imp)}</i></span>` : ""}
@@ -1077,7 +1111,7 @@
       <h3>${esc(newsTitle(a))}</h3>
       ${retitled ? `<p class="news-orig">${esc(a.title)}</p>` : ""}
       ${a.summary ? `<p class="news-sum">${esc(a.summary)}</p>` : !a.ai && a.snippet ? `<p class="news-sum">${esc(a.snippet)}</p>` : ""}
-      ${showFit && a.card?.fit ? `<p class="fy-fit">${esc(a.card.fit)}</p>` : ""}`;
+      ${showFit && isOwner() && a.card?.fit ? `<p class="fy-fit">${esc(a.card.fit)}</p>` : ""}`;
     const foot = `
       <p class="news-extra">
         <a href="${link}" target="_blank" rel="noopener" data-read="${esc(a.id)}">원문 ↗</a>
@@ -1089,10 +1123,11 @@
         <ul>${a.related.map(r => `<li><a href="${esc(safeUrl(r.link))}" target="_blank" rel="noopener">${esc(r.title)}</a> <span>${esc(r.source)}</span></li>`).join("")}</ul>
       </details>` : ""}`;
     // 카드가 있으면 제목을 눌러 페이지 안에서 펼쳐 읽는다. 원문은 아래 작은 링크로만.
-    const body = a.card ? `
+    const card = cardOf(a);
+    const body = card ? `
       <details class="radar" data-open="${esc(a.id)}" ${open ? "open" : ""}>
         <summary>${head}${titles}<span class="rc-toggle">${open ? "접기" : "자세히 보기"}</span></summary>
-        ${radarCardHtml(a.card)}
+        ${radarCardHtml(card)}
       </details>` : `${head}${titles}`;
     return `
       <article class="news-item ${readNews.has(a.id) ? "read" : ""}" id="n-${esc(a.id)}">
@@ -1191,7 +1226,7 @@
   function homeHtml(all) {
     const used = new Set();
     const list = (rows, opts) => rows.length ? `<div class="news-list">${rows.map(a => newsItemHtml(a, opts)).join("")}</div>` : "";
-    const mine = forYou(all, 3, used);
+    const mine = isOwner() ? forYou(all, 3, used) : [];
     const libs = data ? listKeys("hot").map(k => data.repos[k]).filter(isAiRepo).slice(0, 6) : [];
     const of = kind => all.filter(a => a.kind === kind);
     const models = pickTop(of("새 모델"), 4, used);
@@ -1205,7 +1240,7 @@
         libs.length ? `<div class="lib-grid">${libs.map(libMiniHtml).join("")}</div>` : "", { label: "라이브러리 전체", href: "#/t/hot" })}
       ${homeSec("🆕 새 모델", "", list(models), { kind: "새 모델" })}
       ${homeSec("💡 사람들은 이렇게 써요", "Reddit · Hacker News · GeekNews · 블로그의 실제 사용기와 팁", list(usage), { kind: "사용법·팁" })}
-      ${homeSec("📦 내 도구 업데이트", "Claude Code, Codex, Vite, Playwright 등 쓰는 도구의 새 버전", list(tools), { kind: "도구·라이브러리" })}
+      ${homeSec(isOwner() ? "📦 내 도구 업데이트" : "📦 개발 도구 업데이트", "Claude Code, Codex, Vite, Playwright 등 개발 도구의 새 버전", list(tools), { kind: "도구·라이브러리" })}
       ${homeSec("📈 업계 흐름", "", list(trends), { kind: "업계 흐름" })}
       ${homeSec("🖥️ IT 소식", "GeekNews · Hacker News · 바이라인네트워크에서 AI 밖의 개발자 소식", list(it), { kind: "IT 소식" })}`;
   }
@@ -1330,7 +1365,7 @@
       </div>`;
     const more = rows.length > newsState.shown ? `<button type="button" class="more" id="more">더 보기 (${rows.length - newsState.shown}건 남음)</button>` : "";
     const feed = newsState.saved ? `
-      ${descHtml("news:saved", "☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. hyperkwon.com에 로그인돼 있으면 모든 기기에서 같은 목록이 보여요.")}
+      ${descHtml("news:saved", "☆를 눌러 저장한 기사예요. 저장한 순서로 보여주고, 목록에서 빠진 오래된 기사도 카드까지 그대로 남아요. 이 브라우저에 저장돼요.")}
       ${body}
       ${more}
       ${transferHtml()}` : `
@@ -1347,7 +1382,7 @@
       ${more}`;
 
     $app.innerHTML = `
-      ${descHtml("news:intro", `나를 위한 AI 홈이에요. 새 모델, 뜨는 AI 라이브러리, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에 모았어요.
+      ${descHtml("news:intro", `${isOwner() ? "나를 위한 " : ""}AI 홈이에요. 새 모델, 뜨는 AI 라이브러리, 사람들의 활용법, 쓰는 도구의 새 버전을 한곳에 모았어요.
         주요 소식은 AI가 원문을 읽고 정리해 두어서, 제목을 누르면 이 화면에서 바로 읽을 수 있어요.`, "news-desc")}
       ${showHome ? briefHtml() + chips + homeHtml(all) : chips + feed}
       ${newsFootHtml()}`;
@@ -1510,6 +1545,7 @@
   }
 
   window.addEventListener("hashchange", route);
+  window.addEventListener("hashchange", sendHit);
   document.addEventListener("click", e => {
     if (e.target.closest(".card-link") || e.target.closest(".theme-repos a")) listScroll = window.scrollY;
     if (e.target.closest(".lib-mini")) newsScroll = window.scrollY;
@@ -1572,6 +1608,8 @@
   }
 
   // 첫 화면 시작: index.json과 news.json을 동시에 받는다 (이 줄부터는 테스트가 잘라 내고 대신 넣음)
+  applyOwner();
+  sendHit();
   loadNews().then(n => {
     if (n.load_failed) setStatusNote("news", "AI 소식 데이터(news.json)를 불러오지 못했어요.");
   });
@@ -1601,7 +1639,7 @@
         if (btn) {
           btn.href = `${base}/issues/new?title=update&body=${encodeURIComponent(body)}`;
           btn.title = `${updated.textContent} · 누르면 GitHub 이슈 창이 열려요`;
-          btn.hidden = false;
+          btn.hidden = !isOwner();
         }
       }
       const notes = [];
